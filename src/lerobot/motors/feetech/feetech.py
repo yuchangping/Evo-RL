@@ -306,7 +306,19 @@ class FeetechMotorsBus(SerialMotorsBus):
     def enable_torque(self, motors: int | str | list[str] | None = None, num_retry: int = 0) -> None:
         for motor in self._get_motors_list(motors):
             self.write("Torque_Enable", motor, TorqueMode.ENABLED.value, num_retry=num_retry)
-            self.write("Lock", motor, 1, num_retry=num_retry)
+            try:
+                # Some STS3215 chains occasionally return a malformed status packet on the EEPROM lock write
+                # even though torque was already enabled successfully. Keep teleoperation alive and surface
+                # the issue as a warning instead of aborting the whole connect/configure flow.
+                self.write("Lock", motor, 1, num_retry=max(num_retry, 2))
+            except (ConnectionError, RuntimeError) as exc:
+                logger.warning(
+                    "Failed to write EEPROM Lock=1 on motor '%s' (id=%s) after enabling torque. "
+                    "Continuing because torque enable already succeeded. Original error: %s",
+                    motor,
+                    self.motors[motor].id,
+                    exc,
+                )
 
     def _encode_sign(self, data_name: str, ids_values: dict[int, int]) -> dict[int, int]:
         for id_ in ids_values:
