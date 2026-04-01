@@ -31,7 +31,7 @@ from lerobot.utils.decorators import check_if_already_connected, check_if_not_co
 from ..robot import Robot
 from ..utils import ensure_safe_goal_position
 from .config_so_follower import SOFollowerRobotConfig
-from .motor_layout import SO_ARM_FULL_TURN_MOTORS, get_so_arm_motor_ids, resolve_so_arm_side
+from .motor_layout import get_so_arm_motor_ids, resolve_so_arm_side
 
 logger = logging.getLogger(__name__)
 
@@ -132,17 +132,11 @@ class SOFollower(Robot):
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
-        full_turn_motors = [motor for motor in self.bus.motors if motor in SO_ARM_FULL_TURN_MOTORS]
-        unknown_range_motors = [motor for motor in self.bus.motors if motor not in full_turn_motors]
-        excluded_motors = ", ".join(f"'{motor}'" for motor in full_turn_motors)
         print(
-            f"Move all joints except {excluded_motors} sequentially through their "
-            "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
+            "Move all joints sequentially through their entire ranges of motion.\n"
+            "Recording positions for all 7 motors. Press ENTER to stop..."
         )
-        range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
-        for motor in full_turn_motors:
-            range_mins[motor] = 0
-            range_maxes[motor] = 4095
+        range_mins, range_maxes = self.bus.record_ranges_of_motion()
 
         self.calibration = {}
         for motor, m in self.bus.motors.items():
