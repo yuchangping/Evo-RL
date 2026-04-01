@@ -267,6 +267,46 @@ def test_fourcc_with_camera():
         assert isinstance(img, np.ndarray)
 
 
+def test_validate_fps_tolerates_driver_reported_mismatch(caplog):
+    class FakeVideoCapture:
+        def set(self, prop, value):
+            assert prop == cv2.CAP_PROP_FPS
+            assert value == 30.0
+            return True
+
+        def get(self, prop):
+            assert prop == cv2.CAP_PROP_FPS
+            return 120.10136452241716
+
+    config = OpenCVCameraConfig(index_or_path=DEFAULT_PNG_FILE_PATH, fps=30)
+    camera = OpenCVCamera(config)
+    camera.videocapture = FakeVideoCapture()
+
+    with caplog.at_level("WARNING"):
+        camera._validate_fps()
+
+    assert "Continuing with the driver-reported FPS." in caplog.text
+
+
+def test_validate_fps_raises_when_driver_reports_invalid_value():
+    class FakeVideoCapture:
+        def set(self, prop, value):
+            assert prop == cv2.CAP_PROP_FPS
+            assert value == 30.0
+            return False
+
+        def get(self, prop):
+            assert prop == cv2.CAP_PROP_FPS
+            return 0.0
+
+    config = OpenCVCameraConfig(index_or_path=DEFAULT_PNG_FILE_PATH, fps=30)
+    camera = OpenCVCamera(config)
+    camera.videocapture = FakeVideoCapture()
+
+    with pytest.raises(RuntimeError):
+        camera._validate_fps()
+
+
 @pytest.mark.parametrize("index_or_path", TEST_IMAGE_PATHS, ids=TEST_IMAGE_SIZES)
 @pytest.mark.parametrize(
     "rotation",

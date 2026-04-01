@@ -32,11 +32,12 @@ export RIGHT_LEADER_PORT="${PORT_3}"
 export LEFT_LEADER_PORT="${PORT_1}"
 
 
+export LEFT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.2:1.0-video-index0"
+export RIGHT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.3:1.0-video-index0"
+export FRONT_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.1:1.3-video-index0"
 
 
-export LEFT_WRIST_CAM="/dev/v4l/by-path/请替换左腕相机"
-export RIGHT_WRIST_CAM="/dev/v4l/by-path/请替换右腕相机"
-export FRONT_CAM="/dev/v4l/by-path/请替换前视相机"
 
 export LEFT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${LEFT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}}'
-export RIGHT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${RIGHT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}, front: {type: opencv, index_or_path: "'"${FRONT_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}}'
+export FRONT_CAM_CFG='front: {type: opencv, index_or_path: "'"${FRONT_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}'
+export RIGHT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${RIGHT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}, '"${FRONT_CAM_CFG}"'}'
