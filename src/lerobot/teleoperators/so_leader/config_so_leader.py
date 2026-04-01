@@ -27,6 +27,10 @@ class SOLeaderConfig:
     # Port to connect to the arm
     port: str
 
+    # Arm side used to choose the expected servo ID range.
+    # If omitted, it is inferred from `id` when possible and otherwise defaults to `left`.
+    side: str | None = None
+
     # Whether to use degrees for angles
     use_degrees: bool = False
 

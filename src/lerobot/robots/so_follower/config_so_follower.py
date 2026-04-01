@@ -29,6 +29,10 @@ class SOFollowerConfig:
     # Port to connect to the arm
     port: str
 
+    # Arm side used to choose the expected servo ID range.
+    # If omitted, it is inferred from `id` when possible and otherwise defaults to `left`.
+    side: str | None = None
+
     disable_torque_on_disconnect: bool = True
 
     # `max_relative_target` limits the magnitude of the relative positional target vector for safety purposes.

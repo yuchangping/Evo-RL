@@ -50,6 +50,13 @@ def _make_bus_mock() -> MagicMock:
 
 @pytest.fixture
 def follower():
+    robot = _make_follower(SO100FollowerConfig(port="/dev/null"))
+    yield robot
+    if robot.is_connected:
+        robot.disconnect()
+
+
+def _make_follower(config: SO100FollowerConfig) -> SO100Follower:
     bus_mock = _make_bus_mock()
 
     def _bus_side_effect(*_args, **kwargs):
@@ -71,11 +78,7 @@ def follower():
         ),
         patch.object(SO100Follower, "configure", lambda self: None),
     ):
-        cfg = SO100FollowerConfig(port="/dev/null")
-        robot = SO100Follower(cfg)
-        yield robot
-        if robot.is_connected:
-            robot.disconnect()
+        return SO100Follower(config)
 
 
 def test_connect_disconnect(follower):
@@ -109,3 +112,13 @@ def test_send_action(follower):
 
     goal_pos = {m: (i + 1) * 10 for i, m in enumerate(follower.bus.motors)}
     follower.bus.sync_write.assert_called_once_with("Goal_Position", goal_pos)
+
+
+def test_default_single_arm_uses_left_id_range():
+    follower = _make_follower(SO100FollowerConfig(port="/dev/null"))
+    assert [motor.id for motor in follower.bus.motors.values()] == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_right_single_arm_infers_right_id_range_from_robot_id():
+    follower = _make_follower(SO100FollowerConfig(port="/dev/null", id="right_follower_arm"))
+    assert [motor.id for motor in follower.bus.motors.values()] == [8, 9, 10, 11, 12, 13, 14]

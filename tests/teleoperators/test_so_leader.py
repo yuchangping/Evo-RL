@@ -44,6 +44,13 @@ def _make_bus_mock() -> MagicMock:
 
 @pytest.fixture
 def leader():
+    teleop = _make_leader(SO100LeaderConfig(port="/dev/null"))
+    yield teleop
+    if teleop.is_connected:
+        teleop.disconnect()
+
+
+def _make_leader(config: SO100LeaderConfig) -> SO100Leader:
     bus_mock = _make_bus_mock()
 
     def _bus_side_effect(*_args, **kwargs):
@@ -63,11 +70,7 @@ def leader():
         ),
         patch.object(SO100Leader, "configure", lambda self: None),
     ):
-        cfg = SO100LeaderConfig(port="/dev/null")
-        teleop = SO100Leader(cfg)
-        yield teleop
-        if teleop.is_connected:
-            teleop.disconnect()
+        return SO100Leader(config)
 
 
 def test_connect_disconnect(leader):
@@ -92,3 +95,13 @@ def test_send_feedback(leader):
 
     goal_pos = {m: (i + 1) * 10 for i, m in enumerate(leader.bus.motors)}
     leader.bus.sync_write.assert_called_once_with("Goal_Position", goal_pos)
+
+
+def test_default_single_arm_uses_left_id_range():
+    leader = _make_leader(SO100LeaderConfig(port="/dev/null"))
+    assert [motor.id for motor in leader.bus.motors.values()] == [1, 2, 3, 4, 5, 6, 7]
+
+
+def test_right_single_arm_infers_right_id_range_from_teleop_id():
+    leader = _make_leader(SO100LeaderConfig(port="/dev/null", id="right_leader_arm"))
+    assert [motor.id for motor in leader.bus.motors.values()] == [8, 9, 10, 11, 12, 13, 14]

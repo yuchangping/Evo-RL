@@ -57,6 +57,8 @@ COMPATIBLE_DEVICES = [
     "so100_leader",
     "so101_follower",
     "so101_leader",
+    "bi_so_follower",
+    "bi_so_leader",
     "bi_piper_follower",
     "bi_piperx_follower",
     "bi_piper_leader",

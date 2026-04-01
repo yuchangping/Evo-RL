@@ -77,3 +77,25 @@ def test_set_manual_control_forwards_to_both_arms(bi_leader):
     left_arm.set_manual_control.assert_any_call(False)
     right_arm.set_manual_control.assert_any_call(True)
     right_arm.set_manual_control.assert_any_call(False)
+
+
+def test_bimanual_defaults_left_and_right_id_ranges():
+    captured_configs = []
+
+    def _make_arm(config):
+        captured_configs.append(config)
+        return _make_arm_mock(config.id or "arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=_make_arm,
+    ):
+        BiSOLeader(
+            BiSOLeaderConfig(
+                id="bimanual_leader",
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+            )
+        )
+
+    assert [cfg.side for cfg in captured_configs] == ["left", "right"]

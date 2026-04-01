@@ -31,6 +31,7 @@ from lerobot.utils.decorators import check_if_already_connected, check_if_not_co
 from ..robot import Robot
 from ..utils import ensure_safe_goal_position
 from .config_so_follower import SOFollowerRobotConfig
+from .motor_layout import SO_ARM_FULL_TURN_MOTORS, get_so_arm_motor_ids, resolve_so_arm_side
 
 logger = logging.getLogger(__name__)
 
@@ -47,17 +48,20 @@ class SOFollower(Robot):
     def __init__(self, config: SOFollowerRobotConfig):
         super().__init__(config)
         self.config = config
+        self.arm_side = resolve_so_arm_side(config.side, config.id)
+        motor_ids = get_so_arm_motor_ids(self.arm_side, config.id)
         # choose normalization mode depending on config if available
         norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
         self.bus = FeetechMotorsBus(
             port=self.config.port,
             motors={
-                "shoulder_pan": Motor(1, "sts3215", norm_mode_body),
-                "shoulder_lift": Motor(2, "sts3215", norm_mode_body),
-                "elbow_flex": Motor(3, "sts3215", norm_mode_body),
-                "wrist_flex": Motor(4, "sts3215", norm_mode_body),
-                "wrist_roll": Motor(5, "sts3215", norm_mode_body),
-                "gripper": Motor(6, "sts3215", MotorNormMode.RANGE_0_100),
+                "shoulder_pan": Motor(motor_ids["shoulder_pan"], "sts3215", norm_mode_body),
+                "shoulder_lift": Motor(motor_ids["shoulder_lift"], "sts3215", norm_mode_body),
+                "elbow_flex": Motor(motor_ids["elbow_flex"], "sts3215", norm_mode_body),
+                "forearm_roll": Motor(motor_ids["forearm_roll"], "sts3215", norm_mode_body),
+                "wrist_flex": Motor(motor_ids["wrist_flex"], "sts3215", norm_mode_body),
+                "wrist_roll": Motor(motor_ids["wrist_roll"], "sts3215", norm_mode_body),
+                "gripper": Motor(motor_ids["gripper"], "sts3215", MotorNormMode.RANGE_0_100),
             },
             calibration=self.calibration,
         )
@@ -128,16 +132,17 @@ class SOFollower(Robot):
         input(f"Move {self} to the middle of its range of motion and press ENTER....")
         homing_offsets = self.bus.set_half_turn_homings()
 
-        # Attempt to call record_ranges_of_motion with a reduced motor set when appropriate.
-        full_turn_motor = "wrist_roll"
-        unknown_range_motors = [motor for motor in self.bus.motors if motor != full_turn_motor]
+        full_turn_motors = [motor for motor in self.bus.motors if motor in SO_ARM_FULL_TURN_MOTORS]
+        unknown_range_motors = [motor for motor in self.bus.motors if motor not in full_turn_motors]
+        excluded_motors = ", ".join(f"'{motor}'" for motor in full_turn_motors)
         print(
-            f"Move all joints except '{full_turn_motor}' sequentially through their "
+            f"Move all joints except {excluded_motors} sequentially through their "
             "entire ranges of motion.\nRecording positions. Press ENTER to stop..."
         )
         range_mins, range_maxes = self.bus.record_ranges_of_motion(unknown_range_motors)
-        range_mins[full_turn_motor] = 0
-        range_maxes[full_turn_motor] = 4095
+        for motor in full_turn_motors:
+            range_mins[motor] = 0
+            range_maxes[motor] = 4095
 
         self.calibration = {}
         for motor, m in self.bus.motors.items():
