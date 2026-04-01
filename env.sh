@@ -5,7 +5,7 @@ export TASK_NAME=bi_so101_handover_cube
 export TASK_TEXT="Pick up the cube with the left arm and hand it to the right arm."
 
 
-export jiaoyan_NS=72jiaoyansuccess1
+export two-remote-success=two-remote-success1
 
 export LOCAL_DATA_ROOT=/home/jy/Data/YCP/lerobot_datasets
 export SERVER_DATA_ROOT=/home/jy/Data/a100_lerobot_datasets
