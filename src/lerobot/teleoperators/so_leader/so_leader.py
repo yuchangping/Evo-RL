@@ -42,6 +42,8 @@ class SOLeader(Teleoperator):
         super().__init__(config)
         self.config = config
         self._manual_control_enabled = True
+        if config.gripper_input_min == config.gripper_input_max:
+            raise ValueError("`gripper_input_min` and `gripper_input_max` must not be equal.")
         self.arm_side = resolve_so_arm_side(config.side, config.id)
         motor_ids = get_so_arm_motor_ids(self.arm_side, config.id)
         norm_mode_body = MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
@@ -156,9 +158,24 @@ class SOLeader(Teleoperator):
         start = time.perf_counter()
         action = self.bus.sync_read("Present_Position")
         action = {f"{motor}.pos": val for motor, val in action.items()}
+        if "gripper.pos" in action:
+            action["gripper.pos"] = self._remap_gripper_input(action["gripper.pos"])
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read action: {dt_ms:.1f}ms")
         return action
+
+    def _remap_gripper_input(self, value: float) -> float:
+        src_min = float(self.config.gripper_input_min)
+        src_max = float(self.config.gripper_input_max)
+
+        if src_min == 0.0 and src_max == 100.0:
+            return value
+
+        lower = min(src_min, src_max)
+        upper = max(src_min, src_max)
+        clipped = min(max(float(value), lower), upper)
+        remapped = ((clipped - src_min) / (src_max - src_min)) * 100.0
+        return min(max(remapped, 0.0), 100.0)
 
     @check_if_not_connected
     def send_feedback(self, feedback: dict[str, float]) -> None:

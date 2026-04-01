@@ -34,6 +34,13 @@ class SOLeaderConfig:
     # Whether to use degrees for angles
     use_degrees: bool = False
 
+    # Remap the leader gripper's normalized input range to the full 0-100 teleop output range.
+    # This is useful when the leader gripper has a longer physical stroke than the follower.
+    # For example, setting min=0 and max=40 means only the first 40% of leader travel spans
+    # the full follower open/close range.
+    gripper_input_min: float = 0.0
+    gripper_input_max: float = 100.0
+
 
 @TeleoperatorConfig.register_subclass("so101_leader")
 @TeleoperatorConfig.register_subclass("so100_leader")

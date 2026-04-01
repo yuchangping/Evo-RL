@@ -105,3 +105,27 @@ def test_default_single_arm_uses_left_id_range():
 def test_right_single_arm_infers_right_id_range_from_teleop_id():
     leader = _make_leader(SO100LeaderConfig(port="/dev/null", id="right_leader_arm"))
     assert [motor.id for motor in leader.bus.motors.values()] == [8, 9, 10, 11, 12, 13, 14]
+
+
+def test_gripper_input_range_is_remapped_to_full_output():
+    leader = _make_leader(
+        SO100LeaderConfig(
+            port="/dev/null",
+            gripper_input_min=0.0,
+            gripper_input_max=40.0,
+        )
+    )
+    leader.connect()
+    leader.bus.sync_read.return_value = {
+        "shoulder_pan": 1.0,
+        "shoulder_lift": 2.0,
+        "elbow_flex": 3.0,
+        "forearm_roll": 4.0,
+        "wrist_flex": 5.0,
+        "wrist_roll": 6.0,
+        "gripper": 20.0,
+    }
+
+    action = leader.get_action()
+
+    assert action["gripper.pos"] == 50.0

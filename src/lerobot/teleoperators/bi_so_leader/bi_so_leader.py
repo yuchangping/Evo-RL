@@ -45,6 +45,8 @@ class BiSOLeader(Teleoperator):
             port=config.left_arm_config.port,
             side=config.left_arm_config.side or "left",
             use_degrees=config.left_arm_config.use_degrees,
+            gripper_input_min=config.left_arm_config.gripper_input_min,
+            gripper_input_max=config.left_arm_config.gripper_input_max,
         )
 
         right_arm_config = SOLeaderTeleopConfig(
@@ -53,6 +55,8 @@ class BiSOLeader(Teleoperator):
             port=config.right_arm_config.port,
             side=config.right_arm_config.side or "right",
             use_degrees=config.right_arm_config.use_degrees,
+            gripper_input_min=config.right_arm_config.gripper_input_min,
+            gripper_input_max=config.right_arm_config.gripper_input_max,
         )
 
         self.left_arm = SOLeader(left_arm_config)
