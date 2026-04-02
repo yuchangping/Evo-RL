@@ -1306,17 +1306,25 @@ indicator 不再只由高 advantage 决定，而是由：
 - 直接吃掉你最独特的 `policy_action -> executed action` 配对信号
 - 很容易把论文从“标签做得更好”升级成“真的在学纠正机制”
 
-### 如果你更偏系统部署，就把第二建议换成 `Query-Efficient HIL Deployment`
+### 第三建议：如果你更偏系统部署，直接再加入 `Query-Efficient HIL Deployment`
 
-这样你会得到一条更偏真实机器人 autonomy 的故事：
+这样你会得到一条更完整、也更偏真实机器人 autonomy 的故事：
 
 ```text
 更懂人类纠正语义的 ACP
     +
+从人类纠正中学习修正策略
+    +
 更聪明地知道什么时候该叫人来帮忙
 ```
 
-这个组合非常适合真实机器人论文。
+如果你不想把论文一下子做得太大，也可以在写作上这样组织：
+
+- 把 `Intervention-Aware ACP` 作为主方法
+- 把 `Counterfactual Human Correction Distillation` 作为动作层增强
+- 把 `Query-Efficient HIL Deployment` 作为系统部署扩展
+
+这个三者组合非常适合真实机器人部署和人机协作系统论文。
 
 ---
 
