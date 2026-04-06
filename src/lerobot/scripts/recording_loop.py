@@ -48,6 +48,7 @@ from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 from lerobot.utils.constants import ACTION, OBS_STR
 from lerobot.utils.recording_annotations import resolve_collector_policy_id
 from lerobot.utils.robot_utils import precise_sleep
+from lerobot.utils.action_smoothing import ExponentialActionSmoother
 from lerobot.utils.utils import get_safe_torch_device
 from lerobot.utils.visualization_utils import log_rerun_data
 
@@ -112,6 +113,7 @@ def record_loop(
     collector_policy_id_policy: str = "policy",
     collector_policy_id_human: str = "human",
     acp_inference: ACPInferenceConfig | None = None,
+    teleop_action_smoother: ExponentialActionSmoother | None = None,
     communication_retry_timeout_s: float = 2.0,
     communication_retry_interval_s: float = 0.1,
 ):
@@ -305,6 +307,8 @@ def record_loop(
 
         if isinstance(teleop, Teleoperator):
             act = run_with_connection_retry("teleop.get_action", teleop.get_action)
+            if teleop_action_smoother is not None:
+                act = teleop_action_smoother(act)
 
             # Applies a pipeline to the raw teleop action, default is IdentityProcessor
             act_processed_teleop = teleop_action_processor((act, obs))
@@ -315,6 +319,8 @@ def record_loop(
             keyboard_action = teleop_keyboard.get_action()
             base_action = robot._from_keyboard_to_base_action(keyboard_action)
             act = {**arm_action, **base_action} if len(base_action) > 0 else arm_action
+            if teleop_action_smoother is not None:
+                act = teleop_action_smoother(act)
             act_processed_teleop = teleop_action_processor((act, obs))
 
         if act_processed_policy is None and act_processed_teleop is None:

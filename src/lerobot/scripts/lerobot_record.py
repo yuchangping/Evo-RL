@@ -130,6 +130,7 @@ from lerobot.utils.control_utils import (
     sanity_check_dataset_robot_compatibility,
 )
 from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.action_smoothing import ExponentialActionSmoother
 from lerobot.utils.recording_annotations import (
     infer_collector_policy_id,
     normalize_episode_success_label,
@@ -205,6 +206,10 @@ class RecordConfig:
     display_port: int | None = None
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
+    # EMA weight for raw teleop joint commands. 1.0 disables smoothing.
+    teleop_smoothing_alpha: float = 1.0
+    # Whether to smooth gripper commands in addition to arm joints.
+    teleop_smooth_gripper: bool = False
     # Use vocal synthesis to read events.
     play_sounds: bool = True
     # Resume recording on an existing dataset.
@@ -253,6 +258,8 @@ class RecordConfig:
         if self.teleop is None and self.policy is None:
             raise ValueError("Choose a policy, a teleoperator or both to control the robot")
         sanity_check_bimanual_piper_pair(self.robot, self.teleop)
+        if not (0.0 < self.teleop_smoothing_alpha <= 1.0):
+            raise ValueError("`teleop_smoothing_alpha` must be in the range (0, 1].")
         if not self.intervention_toggle_key or len(self.intervention_toggle_key) != 1:
             raise ValueError("`intervention_toggle_key` must be a single character.")
 
@@ -367,6 +374,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     dataset = None
     listener = None
     policy_sync_executor = None
+    teleop_action_smoother = None
 
     try:
         if cfg.resume:
@@ -422,6 +430,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             else infer_collector_policy_id(cfg.policy)
         )
         collector_policy_id_human = cfg.collector_policy_id_human
+        if cfg.teleop_smoothing_alpha < 1.0:
+            teleop_action_smoother = ExponentialActionSmoother(
+                alpha=cfg.teleop_smoothing_alpha,
+                smooth_gripper=cfg.teleop_smooth_gripper,
+            )
 
         robot.connect()
         if teleop is not None:
@@ -475,6 +488,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     collector_policy_id_policy=collector_policy_id_policy,
                     collector_policy_id_human=collector_policy_id_human,
                     acp_inference=cfg.acp_inference,
+                    teleop_action_smoother=teleop_action_smoother,
                     communication_retry_timeout_s=cfg.communication_retry_timeout_s,
                     communication_retry_interval_s=cfg.communication_retry_interval_s,
                 )
@@ -524,6 +538,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         collector_policy_id_policy=collector_policy_id_policy,
                         collector_policy_id_human=collector_policy_id_human,
                         acp_inference=cfg.acp_inference,
+                        teleop_action_smoother=teleop_action_smoother,
                         communication_retry_timeout_s=cfg.communication_retry_timeout_s,
                         communication_retry_interval_s=cfg.communication_retry_interval_s,
                     )

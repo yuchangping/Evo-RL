@@ -47,6 +47,11 @@ class BiSOFollower(Robot):
             disable_torque_on_disconnect=config.left_arm_config.disable_torque_on_disconnect,
             max_relative_target=config.left_arm_config.max_relative_target,
             use_degrees=config.left_arm_config.use_degrees,
+            maximum_acceleration=config.left_arm_config.maximum_acceleration,
+            acceleration=config.left_arm_config.acceleration,
+            position_p_coefficient=config.left_arm_config.position_p_coefficient,
+            position_i_coefficient=config.left_arm_config.position_i_coefficient,
+            position_d_coefficient=config.left_arm_config.position_d_coefficient,
             cameras=config.left_arm_config.cameras,
         )
 
@@ -58,6 +63,11 @@ class BiSOFollower(Robot):
             disable_torque_on_disconnect=config.right_arm_config.disable_torque_on_disconnect,
             max_relative_target=config.right_arm_config.max_relative_target,
             use_degrees=config.right_arm_config.use_degrees,
+            maximum_acceleration=config.right_arm_config.maximum_acceleration,
+            acceleration=config.right_arm_config.acceleration,
+            position_p_coefficient=config.right_arm_config.position_p_coefficient,
+            position_i_coefficient=config.right_arm_config.position_i_coefficient,
+            position_d_coefficient=config.right_arm_config.position_d_coefficient,
             cameras=config.right_arm_config.cameras,
         )
 

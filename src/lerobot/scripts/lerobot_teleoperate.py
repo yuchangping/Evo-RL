@@ -106,6 +106,7 @@ from lerobot.teleoperators import (  # noqa: F401
 )
 from lerobot.utils.control_utils import sanity_check_bimanual_piper_pair
 from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.action_smoothing import ExponentialActionSmoother
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
@@ -122,6 +123,10 @@ class TeleoperateConfig:
     # Limit the maximum frames per second.
     fps: int = 60
     teleop_time_s: float | None = None
+    # EMA weight for raw teleop joint commands. 1.0 disables smoothing.
+    teleop_smoothing_alpha: float = 1.0
+    # Whether to smooth gripper commands in addition to arm joints.
+    teleop_smooth_gripper: bool = False
     # Display all cameras on screen
     display_data: bool = False
     # Display data on a remote Rerun server
@@ -130,6 +135,10 @@ class TeleoperateConfig:
     display_port: int | None = None
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
+
+    def __post_init__(self) -> None:
+        if not (0.0 < self.teleop_smoothing_alpha <= 1.0):
+            raise ValueError("`teleop_smoothing_alpha` must be in the range (0, 1].")
 
 
 def _processor_pipeline_needs_observation(
@@ -169,6 +178,7 @@ def teleop_loop(
     display_data: bool = False,
     duration: float | None = None,
     display_compressed_images: bool = False,
+    teleop_action_smoother: ExponentialActionSmoother | None = None,
 ):
     """
     This function continuously reads actions from a teleoperation device, processes them through optional
@@ -205,6 +215,8 @@ def teleop_loop(
 
         # Get teleop action
         raw_action = teleop.get_action()
+        if teleop_action_smoother is not None:
+            raw_action = teleop_action_smoother(raw_action)
 
         # Process teleop action through pipeline
         teleop_action = teleop_action_processor((raw_action, obs))
@@ -262,6 +274,12 @@ def teleoperate(cfg: TeleoperateConfig):
     teleop = make_teleoperator_from_config(cfg.teleop)
     robot = make_robot_from_config(cfg.robot)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+    teleop_action_smoother = None
+    if cfg.teleop_smoothing_alpha < 1.0:
+        teleop_action_smoother = ExponentialActionSmoother(
+            alpha=cfg.teleop_smoothing_alpha,
+            smooth_gripper=cfg.teleop_smooth_gripper,
+        )
     should_fetch_obs = _teleop_needs_robot_observation(
         cfg.display_data, teleop_action_processor, robot_action_processor
     )
@@ -281,6 +299,7 @@ def teleoperate(cfg: TeleoperateConfig):
             robot_action_processor=robot_action_processor,
             robot_observation_processor=robot_observation_processor,
             display_compressed_images=display_compressed_images,
+            teleop_action_smoother=teleop_action_smoother,
         )
     except KeyboardInterrupt:
         pass

@@ -2,7 +2,7 @@
 
 export DATA_NS=local
 export TASK_NAME=bi_so101_handover_cube
-export TASK_TEXT="Pick up the cube with the left arm and hand it to the right arm."
+export TASK_TEXT="Pick up the cube with the left arm, hand it over to the right arm, and then place it into the box."
 
 
 export startcaiji=startcaiji1
@@ -30,6 +30,19 @@ export RIGHT_FOLLOWER_PORT="${PORT_4}"
 export LEFT_FOLLOWER_PORT="${PORT_2}"
 export RIGHT_LEADER_PORT="${PORT_3}"
 export LEFT_LEADER_PORT="${PORT_1}"
+
+# Teleoperation tuning: smoother and less jittery baseline for SO bimanual control.
+export TELEOP_SMOOTHING_ALPHA=0.35
+export TELEOP_SMOOTH_GRIPPER=false
+
+export FOLLOWER_ACCELERATION=80
+export FOLLOWER_MAX_ACCELERATION=120
+export FOLLOWER_POSITION_P=12
+export FOLLOWER_POSITION_I=0
+export FOLLOWER_POSITION_D=40
+
+export SO_TELEOP_SMOOTHING_ARGS="--teleop_smoothing_alpha=${TELEOP_SMOOTHING_ALPHA} --teleop_smooth_gripper=${TELEOP_SMOOTH_GRIPPER}"
+export SO_FOLLOWER_TUNING_ARGS="--robot.left_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.left_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.left_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.left_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.left_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D} --robot.right_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.right_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.right_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.right_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.right_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D}"
 
 
 export LEFT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.2:1.0-video-index0"

@@ -46,6 +46,16 @@ class SOFollowerConfig:
     # Set to `True` for backward compatibility with previous policies/dataset
     use_degrees: bool = False
 
+    # Feetech motion profile tuning. Lower acceleration typically feels smoother but more laggy.
+    maximum_acceleration: int = 254
+    acceleration: int = 254
+
+    # Position-loop PID gains written to each follower joint at connect time.
+    # Lower P / higher D usually reduce shakiness at the cost of some responsiveness.
+    position_p_coefficient: int = 16
+    position_i_coefficient: int = 0
+    position_d_coefficient: int = 32
+
 
 @RobotConfig.register_subclass("so101_follower")
 @RobotConfig.register_subclass("so100_follower")
