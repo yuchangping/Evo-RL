@@ -104,7 +104,7 @@ def record_loop(
     policy: PreTrainedPolicy | None = None,
     preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None,
     postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None,
-    control_time_s: int | None = None,
+    control_time_s: int | float | None = None,
     single_task: str | None = None,
     display_data: bool = False,
     display_compressed_images: bool = False,
@@ -116,6 +116,8 @@ def record_loop(
     teleop_action_smoother: ExponentialActionSmoother | None = None,
     communication_retry_timeout_s: float = 2.0,
     communication_retry_interval_s: float = 0.1,
+    advance_to_next_stage_key_enabled: bool = False,
+    ignore_exit_early: bool = False,
 ):
     if acp_inference is None:
         acp_inference = ACPInferenceConfig()
@@ -240,13 +242,31 @@ def record_loop(
                 sleep_s = interval_s if interval_s > 0.0 else remaining_s
                 time.sleep(min(sleep_s, remaining_s))
 
-    timestamp = 0
+    manual_mode = control_time_s is None or control_time_s <= 0
+    timestamp = 0.0
     start_episode_t = time.perf_counter()
-    while timestamp < control_time_s:
+    while True:
         start_loop_t = time.perf_counter()
 
-        if events["exit_early"]:
+        if events.get("stop_recording", False):
             events["exit_early"] = False
+            break
+
+        if events.get("rerecord_episode", False):
+            break
+
+        if advance_to_next_stage_key_enabled and events.get("advance_to_next_stage", False):
+            events["advance_to_next_stage"] = False
+            events["exit_early"] = False
+            break
+
+        if events["exit_early"] and ignore_exit_early:
+            events["exit_early"] = False
+        elif events["exit_early"]:
+            events["exit_early"] = False
+            break
+
+        if not manual_mode and timestamp >= control_time_s:
             break
 
         if events.get("toggle_intervention", False):

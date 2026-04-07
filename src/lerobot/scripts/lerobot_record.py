@@ -466,7 +466,16 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             recorded_episodes = 0
             while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                 events["episode_outcome"] = None
-                log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
+                events["advance_to_next_stage"] = False
+                current_episode_idx = dataset.num_episodes + 1
+                if cfg.dataset.episode_time_s <= 0:
+                    logging.info(
+                        "Start recording episode %d. Right Arrow ends this episode, Left Arrow discards and re-records it, Esc stops the whole session.",
+                        current_episode_idx,
+                    )
+                    log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
+                else:
+                    log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
                 record_loop(
                     robot=robot,
                     events=events,
@@ -516,6 +525,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 if not events["stop_recording"] and (
                     (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
                 ):
+                    if cfg.dataset.reset_time_s <= 0:
+                        logging.info(
+                            "Reset the environment manually. Press Down Arrow when you are ready to start the next episode."
+                        )
+                        events["advance_to_next_stage"] = False
                     log_say("Reset the environment", cfg.play_sounds)
 
                     # reset g1 robot
@@ -541,12 +555,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                         teleop_action_smoother=teleop_action_smoother,
                         communication_retry_timeout_s=cfg.communication_retry_timeout_s,
                         communication_retry_interval_s=cfg.communication_retry_interval_s,
+                        advance_to_next_stage_key_enabled=cfg.dataset.reset_time_s <= 0,
+                        ignore_exit_early=cfg.dataset.reset_time_s <= 0,
                     )
 
                 if events["rerecord_episode"]:
                     log_say("Re-record episode", cfg.play_sounds)
                     events["rerecord_episode"] = False
                     events["exit_early"] = False
+                    events["advance_to_next_stage"] = False
                     events["episode_outcome"] = None
                     dataset.clear_episode_buffer()
                     continue
@@ -556,6 +573,20 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 )
                 dataset.save_episode(extra_episode_metadata=extra_episode_metadata)
                 recorded_episodes += 1
+
+                if (
+                    cfg.dataset.reset_time_s <= 0
+                    and not events["stop_recording"]
+                    and recorded_episodes < cfg.dataset.num_episodes
+                ):
+                    next_episode_idx = dataset.num_episodes + 1
+                    logging.info(
+                        "Episode %d recorded successfully. Press Down Arrow to start episode %d. Left Arrow discards the last episode and re-records it. Esc stops the whole session.",
+                        dataset.num_episodes,
+                        next_episode_idx,
+                    )
+                elif cfg.dataset.reset_time_s <= 0 and recorded_episodes >= cfg.dataset.num_episodes:
+                    logging.info("Episode %d recorded successfully. Recording target reached.", dataset.num_episodes)
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 

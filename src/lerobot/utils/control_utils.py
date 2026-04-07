@@ -153,6 +153,9 @@ class TTYKeyboardListener:
         if normalized == "RIGHT":
             print("Right arrow key pressed. Exiting loop...")
             self.events["exit_early"] = True
+        elif normalized == "DOWN":
+            print("Down arrow key pressed. Starting the next stage...")
+            self.events["advance_to_next_stage"] = True
         elif normalized == "LEFT":
             print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
             self.events["rerecord_episode"] = True
@@ -252,6 +255,7 @@ def init_keyboard_listener(
     # to allow your terminal to monitor keyboard events.
     events = {}
     events["exit_early"] = False
+    events["advance_to_next_stage"] = False
     events["rerecord_episode"] = False
     events["stop_recording"] = False
     events["toggle_intervention"] = False
@@ -269,6 +273,9 @@ def init_keyboard_listener(
                 if key == keyboard.Key.right:
                     print("Right arrow key pressed. Exiting loop...")
                     events["exit_early"] = True
+                elif key == keyboard.Key.down:
+                    print("Down arrow key pressed. Starting the next stage...")
+                    events["advance_to_next_stage"] = True
                 elif key == keyboard.Key.left:
                     print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
                     events["rerecord_episode"] = True
