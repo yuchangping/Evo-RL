@@ -17,15 +17,20 @@ source "${LOCAL_ENV_SH}"
 
 if [[ -z "${H100_USER:-}" || -z "${H100_HOST:-}" ]]; then
   echo "Please set H100_USER and H100_HOST before running this script." >&2
-  echo 'Example: H100_USER=neu_lab1 H100_HOST=10.0.0.8 bash scripts/sync_to_h100.sh all' >&2
+  echo 'Example: H100_USER=neu_lab1 H100_HOST=10.0.0.8 H100_PORT=2201 bash scripts/sync_to_h100.sh all' >&2
   exit 1
 fi
 
 SYNC_TARGET="${1:-all}"
 REMOTE_SSH_TARGET="${H100_USER}@${H100_HOST}"
+SSH_PORT_ARGS=()
+
+if [[ -n "${H100_PORT:-}" ]]; then
+  SSH_PORT_ARGS=(-p "${H100_PORT}")
+fi
 
 REMOTE_SERVER_DATA_ROOT="$(
-  ssh "${REMOTE_SSH_TARGET}" "bash -lc 'source \"${REMOTE_ENV_SH}\" >/dev/null 2>&1 && printf \"%s\" \"\${SERVER_DATA_ROOT}\"'"
+  ssh "${SSH_PORT_ARGS[@]}" "${REMOTE_SSH_TARGET}" "bash -lc 'source \"${REMOTE_ENV_SH}\" >/dev/null 2>&1 && printf \"%s\" \"\${SERVER_DATA_ROOT}\"'"
 )"
 
 if [[ -z "${REMOTE_SERVER_DATA_ROOT}" ]]; then
@@ -44,8 +49,8 @@ sync_one() {
   fi
 
   echo "Syncing ${src_dir} -> ${REMOTE_SSH_TARGET}:${dst_dir}"
-  ssh "${REMOTE_SSH_TARGET}" "mkdir -p '${dst_dir}'"
-  rsync -avh --info=progress2 "${src_dir}/" "${REMOTE_SSH_TARGET}:${dst_dir}/"
+  ssh "${SSH_PORT_ARGS[@]}" "${REMOTE_SSH_TARGET}" "mkdir -p '${dst_dir}'"
+  rsync -avh --info=progress2 -e "ssh ${H100_PORT:+-p ${H100_PORT}}" "${src_dir}/" "${REMOTE_SSH_TARGET}:${dst_dir}/"
 }
 
 case "${SYNC_TARGET}" in
