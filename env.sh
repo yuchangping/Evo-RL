@@ -5,7 +5,7 @@ export TASK_NAME=bi_so101_handover_cube
 export TASK_TEXT="Pick up the cube with the left arm, hand it over to the right arm, and then place it into the box."
 
 
-export startcaiji=startcaiji1
+export h100training=h100training1
 
 export LOCAL_DATA_ROOT=/home/jy/Data/YCP/lerobot_datasets
 export SERVER_DATA_ROOT=/home/jy/Data/a100_lerobot_datasets
