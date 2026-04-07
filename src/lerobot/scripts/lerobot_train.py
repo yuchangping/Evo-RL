@@ -40,7 +40,15 @@ from lerobot.rl.acp_hook import build_acp_raw_batch_hook
 from lerobot.rl.wandb_utils import WandBLogger
 from lerobot.scripts.lerobot_eval import eval_policy_all
 from lerobot.utils.import_utils import register_third_party_plugins
-from lerobot.utils.logging_utils import AverageMeter, MetricsTracker
+from lerobot.utils.logging_utils import (
+    AverageMeter,
+    MetricsTracker,
+    attach_output_metrics_to_tracker,
+    collect_runtime_metrics,
+    format_metrics_section,
+    should_log_detailed_metrics,
+    split_runtime_metrics,
+)
 from lerobot.utils.random_utils import set_seed
 from lerobot.utils.train_utils import (
     get_step_checkpoint_dir,
@@ -54,6 +62,89 @@ from lerobot.utils.utils import (
     has_method,
     init_logging,
 )
+
+
+def _chunk_text(text: str, chunk_size: int) -> list[str]:
+    tokens = text.split()
+    if not tokens:
+        return []
+    return [" ".join(tokens[i : i + chunk_size]) for i in range(0, len(tokens), chunk_size)]
+
+
+def format_policy_prompt_preview(prompt_key: str, prompt: str) -> str:
+    prompt = prompt.strip()
+    task_text = None
+    state_text = None
+    action_text = None
+
+    for line in prompt.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("Task:"):
+            task_and_state = line.removeprefix("Task:").strip()
+            if ", State:" in task_and_state:
+                task_text, state_text = task_and_state.split(", State:", maxsplit=1)
+                task_text = task_text.strip()
+                state_text = state_text.strip().rstrip(";")
+            else:
+                task_text = task_and_state
+        elif line.startswith("State:"):
+            state_text = line.removeprefix("State:").strip().rstrip(";")
+        elif line.startswith("Action:"):
+            action_text = line.removeprefix("Action:").strip()
+
+    preview_lines = [f"首条策略提示词（{prompt_key}）"]
+    if task_text:
+        preview_lines.append(f"  任务: {task_text}")
+    if state_text:
+        preview_lines.append("  状态离散值:")
+        for state_line in _chunk_text(state_text, 8):
+            preview_lines.append(f"    {state_line}")
+    if action_text:
+        preview_lines.append(f"  动作前缀: {action_text}")
+    else:
+        preview_lines.append("  动作前缀: 待模型生成")
+
+    if len(preview_lines) == 1:
+        preview_lines.append(f"  原始内容: {prompt}")
+    return "\n".join(preview_lines)
+
+
+def format_training_log_message(
+    train_tracker: MetricsTracker,
+    effective_batch_size: int,
+    device: torch.device,
+    extra_display_metrics: dict[str, Any] | None = None,
+    runtime_metrics: dict[str, Any] | None = None,
+    include_detailed_metrics: bool = False,
+) -> str:
+    sections = [str(train_tracker)]
+
+    regular_runtime_metrics, detailed_runtime_metrics = split_runtime_metrics(
+        collect_runtime_metrics(train_tracker, device, effective_batch_size)
+    )
+    if runtime_metrics:
+        extra_regular_runtime, extra_detailed_runtime = split_runtime_metrics(runtime_metrics)
+        regular_runtime_metrics.update(extra_regular_runtime)
+        detailed_runtime_metrics.update(extra_detailed_runtime)
+
+    if include_detailed_metrics:
+        sections.append(train_tracker.format_detailed_metrics())
+
+        regular_runtime_section = format_metrics_section("运行时指标", regular_runtime_metrics)
+        if regular_runtime_section:
+            sections.append(regular_runtime_section)
+
+        display_section = format_metrics_section("扩展输出指标", extra_display_metrics)
+        if display_section:
+            sections.append(display_section)
+
+        detailed_runtime_section = format_metrics_section("详细运行指标", detailed_runtime_metrics)
+        if detailed_runtime_section:
+            sections.append(detailed_runtime_section)
+
+    return "\n".join(sections)
 
 
 def update_policy(
@@ -422,8 +513,12 @@ def train(
         dataset.num_episodes,
         train_metrics,
         initial_step=step,
+        total_steps=cfg.steps,
         accelerator=accelerator,
     )
+
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     if is_main_process:
         logging.info(
@@ -459,7 +554,7 @@ def train(
                     if isinstance(first_item, str):
                         first_prompt = first_item
                 if first_prompt is not None:
-                    logging.info("First policy prompt (%s):\n%s", key, first_prompt)
+                    logging.info(format_policy_prompt_preview(key, first_prompt))
                     logged_first_prompt = True
                     break
         train_tracker.dataloading_s = time.perf_counter() - start_time
@@ -474,6 +569,7 @@ def train(
             lr_scheduler=lr_scheduler,
             rabc_weights_provider=rabc_weights,
         )
+        extra_display_metrics = attach_output_metrics_to_tracker(train_tracker, output_dict)
 
         # Note: eval and checkpoint happens *after* the `step`th training update has completed, so we
         # increment `step` here.
@@ -484,7 +580,30 @@ def train(
         is_eval_step = cfg.eval_freq > 0 and step % cfg.eval_freq == 0
 
         if is_log_step:
-            logging.info(train_tracker)
+            runtime_metrics = {}
+            if rabc_weights is not None:
+                rabc_stats = rabc_weights.get_stats()
+                runtime_metrics.update(
+                    {
+                        "rabc_delta_mean": rabc_stats["delta_mean"],
+                        "rabc_delta_std": rabc_stats["delta_std"],
+                        "rabc_num_frames": rabc_stats["num_frames"],
+                    }
+                )
+
+            include_detailed_metrics = should_log_detailed_metrics(
+                step, cfg.steps, cfg.log_freq, cfg.detailed_log_every
+            )
+            logging.info(
+                format_training_log_message(
+                    train_tracker,
+                    effective_batch_size,
+                    device,
+                    extra_display_metrics=extra_display_metrics,
+                    runtime_metrics=runtime_metrics,
+                    include_detailed_metrics=include_detailed_metrics,
+                )
+            )
             if wandb_logger:
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:

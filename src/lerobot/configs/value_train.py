@@ -61,6 +61,7 @@ class ValueTrainPipelineConfig(HubMixin):
     batch_size: int = 64
     steps: int = 8_000
     log_freq: int = 200
+    detailed_log_every: int = 5
     tolerance_s: float = 1e-4
 
     save_checkpoint: bool = True
@@ -113,6 +114,9 @@ class ValueTrainPipelineConfig(HubMixin):
             )
 
         self.targets.validate()
+
+        if self.detailed_log_every <= 0:
+            raise ValueError("'detailed_log_every' must be > 0.")
 
         if hasattr(self.value, "target_key"):
             self.value.target_key = self.targets.target_field

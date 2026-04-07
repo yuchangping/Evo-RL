@@ -63,6 +63,7 @@ class TrainPipelineConfig(HubMixin):
     steps: int = 100_000
     eval_freq: int = 20_000
     log_freq: int = 200
+    detailed_log_every: int = 5
     tolerance_s: float = 1e-4
     save_checkpoint: bool = True
     # Checkpoint is saved every `save_freq` training iterations and after the last training step.
@@ -136,6 +137,9 @@ class TrainPipelineConfig(HubMixin):
 
         if isinstance(self.dataset.repo_id, list):
             raise NotImplementedError("LeRobotMultiDataset is not currently implemented.")
+
+        if self.detailed_log_every <= 0:
+            raise ValueError("'detailed_log_every' must be > 0.")
 
         if not self.use_policy_training_preset and (self.optimizer is None or self.scheduler is None):
             raise ValueError("Optimizer and Scheduler must be set when the policy presets are not used.")

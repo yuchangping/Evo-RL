@@ -20,7 +20,15 @@ from lerobot.policies.factory import make_policy, make_pre_post_processors
 from lerobot.policies.pretrained import PreTrainedPolicy
 from lerobot.rl.wandb_utils import WandBLogger
 from lerobot.utils.import_utils import register_third_party_plugins
-from lerobot.utils.logging_utils import AverageMeter, MetricsTracker
+from lerobot.utils.logging_utils import (
+    AverageMeter,
+    MetricsTracker,
+    attach_output_metrics_to_tracker,
+    collect_runtime_metrics,
+    format_metrics_section,
+    should_log_detailed_metrics,
+    split_runtime_metrics,
+)
 from lerobot.utils.random_utils import set_seed
 from lerobot.utils.train_utils import (
     get_step_checkpoint_dir,
@@ -29,6 +37,37 @@ from lerobot.utils.train_utils import (
     update_last_checkpoint,
 )
 from lerobot.utils.utils import format_big_number, has_method, init_logging
+
+
+def format_value_training_log_message(
+    train_tracker: MetricsTracker,
+    effective_batch_size: int,
+    device: torch.device,
+    extra_display_metrics: dict[str, Any] | None = None,
+    include_detailed_metrics: bool = False,
+) -> str:
+    sections = [str(train_tracker)]
+
+    regular_runtime_metrics, detailed_runtime_metrics = split_runtime_metrics(
+        collect_runtime_metrics(train_tracker, device, effective_batch_size)
+    )
+
+    if include_detailed_metrics:
+        sections.append(train_tracker.format_detailed_metrics())
+
+        runtime_section = format_metrics_section("运行时指标", regular_runtime_metrics)
+        if runtime_section:
+            sections.append(runtime_section)
+
+        display_section = format_metrics_section("扩展输出指标", extra_display_metrics)
+        if display_section:
+            sections.append(display_section)
+
+        detailed_runtime_section = format_metrics_section("详细运行指标", detailed_runtime_metrics)
+        if detailed_runtime_section:
+            sections.append(detailed_runtime_section)
+
+    return "\n".join(sections)
 
 
 def update_policy(
@@ -232,8 +271,12 @@ def value_train(
         dataset.num_episodes,
         train_metrics,
         initial_step=step,
+        total_steps=cfg.steps,
         accelerator=accelerator,
     )
+
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     if is_main_process:
         logging.info(
@@ -272,6 +315,7 @@ def value_train(
             accelerator=accelerator,
             lr_scheduler=lr_scheduler,
         )
+        extra_display_metrics = attach_output_metrics_to_tracker(train_tracker, output_dict)
 
         step += 1
         train_tracker.step()
@@ -279,7 +323,18 @@ def value_train(
         is_saving_step = step % cfg.save_freq == 0 or step == cfg.steps
 
         if is_log_step:
-            logging.info(train_tracker)
+            include_detailed_metrics = should_log_detailed_metrics(
+                step, cfg.steps, cfg.log_freq, cfg.detailed_log_every
+            )
+            logging.info(
+                format_value_training_log_message(
+                    train_tracker,
+                    effective_batch_size,
+                    device,
+                    extra_display_metrics=extra_display_metrics,
+                    include_detailed_metrics=include_detailed_metrics,
+                )
+            )
             if wandb_logger:
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
