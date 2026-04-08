@@ -137,6 +137,8 @@ class TTYKeyboardListener:
             sequence_bytes = bytes(sequence)
             if sequence_bytes in {b"\x1b[C", b"\x1bOC"}:
                 return "RIGHT"
+            if sequence_bytes in {b"\x1b[B", b"\x1bOB"}:
+                return "DOWN"
             if sequence_bytes in {b"\x1b[D", b"\x1bOD"}:
                 return "LEFT"
             if sequence_bytes == b"\x1b":
@@ -151,17 +153,17 @@ class TTYKeyboardListener:
     def _handle_key(self, key: str):
         normalized = key.lower() if len(key) == 1 else key
         if normalized == "RIGHT":
-            print("Right arrow key pressed. Exiting loop...")
+            print("检测到右方向键：结束当前条并保存。")
             self.events["exit_early"] = True
         elif normalized == "DOWN":
-            print("Down arrow key pressed. Starting the next stage...")
+            print("检测到下方向键：开始下一阶段。")
             self.events["advance_to_next_stage"] = True
         elif normalized == "LEFT":
-            print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
+            print("检测到左方向键：丢弃当前条并重录。")
             self.events["rerecord_episode"] = True
             self.events["exit_early"] = True
         elif normalized == "ESC":
-            print("Escape key pressed. Stopping data recording...")
+            print("检测到 Esc：停止数据采集。")
             self.events["stop_recording"] = True
             self.events["exit_early"] = True
         elif normalized == self.intervention_toggle_key:
@@ -169,14 +171,14 @@ class TTYKeyboardListener:
             if now - self._last_intervention_time < INTERVENTION_TOGGLE_COOLDOWN_S:
                 return
             self._last_intervention_time = now
-            print(f"'{self.intervention_toggle_key}' key pressed. Toggling intervention mode...")
+            print(f"检测到 '{self.intervention_toggle_key}'：切换 intervention 模式。")
             self.events["toggle_intervention"] = True
         elif self.episode_success_key and normalized == self.episode_success_key:
-            print(f"'{self.episode_success_key}' key pressed. Marking episode as success and exiting loop...")
+            print(f"检测到 '{self.episode_success_key}'：标记当前条成功并结束。")
             self.events["episode_outcome"] = EPISODE_SUCCESS
             self.events["exit_early"] = True
         elif self.episode_failure_key and normalized == self.episode_failure_key:
-            print(f"'{self.episode_failure_key}' key pressed. Marking episode as failure and exiting loop...")
+            print(f"检测到 '{self.episode_failure_key}'：标记当前条失败并结束。")
             self.events["episode_outcome"] = EPISODE_FAILURE
             self.events["exit_early"] = True
 
@@ -271,17 +273,17 @@ def init_keyboard_listener(
         def on_press(key):
             try:
                 if key == keyboard.Key.right:
-                    print("Right arrow key pressed. Exiting loop...")
+                    print("检测到右方向键：结束当前条并保存。")
                     events["exit_early"] = True
                 elif key == keyboard.Key.down:
-                    print("Down arrow key pressed. Starting the next stage...")
+                    print("检测到下方向键：开始下一阶段。")
                     events["advance_to_next_stage"] = True
                 elif key == keyboard.Key.left:
-                    print("Left arrow key pressed. Exiting loop and rerecord the last episode...")
+                    print("检测到左方向键：丢弃当前条并重录。")
                     events["rerecord_episode"] = True
                     events["exit_early"] = True
                 elif key == keyboard.Key.esc:
-                    print("Escape key pressed. Stopping data recording...")
+                    print("检测到 Esc：停止数据采集。")
                     events["stop_recording"] = True
                     events["exit_early"] = True
                 elif hasattr(key, "char") and key.char and key.char.lower() == intervention_toggle_key.lower():
@@ -289,7 +291,7 @@ def init_keyboard_listener(
                     if now - last_intervention_time[0] < INTERVENTION_TOGGLE_COOLDOWN_S:
                         return
                     last_intervention_time[0] = now
-                    print(f"'{intervention_toggle_key}' key pressed. Toggling intervention mode...")
+                    print(f"检测到 '{intervention_toggle_key}'：切换 intervention 模式。")
                     events["toggle_intervention"] = True
                 elif (
                     episode_success_key
@@ -297,7 +299,7 @@ def init_keyboard_listener(
                     and key.char
                     and key.char.lower() == episode_success_key.lower()
                 ):
-                    print(f"'{episode_success_key}' key pressed. Marking episode as success and exiting loop...")
+                    print(f"检测到 '{episode_success_key}'：标记当前条成功并结束。")
                     events["episode_outcome"] = EPISODE_SUCCESS
                     events["exit_early"] = True
                 elif (
@@ -306,7 +308,7 @@ def init_keyboard_listener(
                     and key.char
                     and key.char.lower() == episode_failure_key.lower()
                 ):
-                    print(f"'{episode_failure_key}' key pressed. Marking episode as failure and exiting loop...")
+                    print(f"检测到 '{episode_failure_key}'：标记当前条失败并结束。")
                     events["episode_outcome"] = EPISODE_FAILURE
                     events["exit_early"] = True
             except Exception as e:

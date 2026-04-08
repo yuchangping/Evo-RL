@@ -72,10 +72,16 @@ class BiSOLeader(Teleoperator):
             (arm_side == "left" and self.config.invert_left_wrist_flex)
             or (arm_side == "right" and self.config.invert_right_wrist_flex)
         )
+        should_invert_wrist_roll = (
+            (arm_side == "left" and self.config.invert_left_wrist_roll)
+            or (arm_side == "right" and self.config.invert_right_wrist_roll)
+        )
         if should_invert_shoulder_pan and "shoulder_pan.pos" in adjusted_action:
             adjusted_action["shoulder_pan.pos"] = -adjusted_action["shoulder_pan.pos"]
         if should_invert_wrist_flex and "wrist_flex.pos" in adjusted_action:
             adjusted_action["wrist_flex.pos"] = -adjusted_action["wrist_flex.pos"]
+        if should_invert_wrist_roll and "wrist_roll.pos" in adjusted_action:
+            adjusted_action["wrist_roll.pos"] = -adjusted_action["wrist_roll.pos"]
         return adjusted_action
 
     def _maybe_invert_physical_arm_feedback(self, arm_side: str, feedback: dict[str, float]) -> dict[str, float]:
@@ -88,10 +94,16 @@ class BiSOLeader(Teleoperator):
             (arm_side == "left" and self.config.invert_left_wrist_flex)
             or (arm_side == "right" and self.config.invert_right_wrist_flex)
         )
+        should_invert_wrist_roll = (
+            (arm_side == "left" and self.config.invert_left_wrist_roll)
+            or (arm_side == "right" and self.config.invert_right_wrist_roll)
+        )
         if should_invert_shoulder_pan and "shoulder_pan.pos" in adjusted_feedback:
             adjusted_feedback["shoulder_pan.pos"] = -adjusted_feedback["shoulder_pan.pos"]
         if should_invert_wrist_flex and "wrist_flex.pos" in adjusted_feedback:
             adjusted_feedback["wrist_flex.pos"] = -adjusted_feedback["wrist_flex.pos"]
+        if should_invert_wrist_roll and "wrist_roll.pos" in adjusted_feedback:
+            adjusted_feedback["wrist_roll.pos"] = -adjusted_feedback["wrist_roll.pos"]
         return adjusted_feedback
 
     def _output_prefix_for_arm(self, arm_side: str) -> str:

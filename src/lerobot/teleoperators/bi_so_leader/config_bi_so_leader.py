@@ -36,11 +36,15 @@ class BiSOLeaderConfig(TeleoperatorConfig):
     invert_left_shoulder_pan: bool = False
     # Flip the left-arm wrist flex sign.
     invert_left_wrist_flex: bool = False
+    # Flip the left-arm wrist roll sign.
+    invert_left_wrist_roll: bool = False
     # Flip the right-arm shoulder pan sign so moving the leader right arm outward
     # also moves the follower right arm outward on mirrored hardware layouts.
     invert_right_shoulder_pan: bool = False
     # Flip the right-arm wrist flex sign.
     invert_right_wrist_flex: bool = False
+    # Flip the right-arm wrist roll sign.
+    invert_right_wrist_roll: bool = False
 
     def __post_init__(self) -> None:
         if self.arm_mapping not in {"same_side", "crossed"}:

@@ -248,3 +248,40 @@ def test_invert_left_and_right_wrist_flex_flips_both_sides():
 
     left_arm.send_feedback.assert_called_with({"wrist_flex.pos": -5.0})
     right_arm.send_feedback.assert_called_with({"wrist_flex.pos": -8.0})
+
+
+def test_invert_left_and_right_wrist_roll_flips_both_sides():
+    left_arm = _make_arm_mock("left_arm")
+    right_arm = _make_arm_mock("right_arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=[left_arm, right_arm],
+    ):
+        teleop = BiSOLeader(
+            BiSOLeaderConfig(
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+                invert_left_wrist_roll=True,
+                invert_right_wrist_roll=True,
+            )
+        )
+
+    teleop.connect()
+    left_arm.get_action.return_value = {"wrist_roll.pos": 12.0}
+    right_arm.get_action.return_value = {"wrist_roll.pos": 30.0}
+
+    assert teleop.get_action() == {
+        "left_wrist_roll.pos": -12.0,
+        "right_wrist_roll.pos": -30.0,
+    }
+
+    teleop.send_feedback(
+        {
+            "left_wrist_roll.pos": 5.0,
+            "right_wrist_roll.pos": 8.0,
+        }
+    )
+
+    left_arm.send_feedback.assert_called_with({"wrist_roll.pos": -5.0})
+    right_arm.send_feedback.assert_called_with({"wrist_roll.pos": -8.0})

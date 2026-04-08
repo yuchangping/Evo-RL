@@ -37,10 +37,12 @@ export TELEOP_SMOOTH_GRIPPER=false
 export SO_TELEOP_ARM_MAPPING="same_side"
 export SO_TELEOP_INVERT_LEFT_SHOULDER_PAN=true
 export SO_TELEOP_INVERT_LEFT_WRIST_FLEX=true
+export SO_TELEOP_INVERT_LEFT_WRIST_ROLL=true
 # Right leader shoulder pan inversion:
 # when the right leader arm swings outward, the right follower arm also swings outward.
 export SO_TELEOP_INVERT_RIGHT_SHOULDER_PAN=true
 export SO_TELEOP_INVERT_RIGHT_WRIST_FLEX=true
+export SO_TELEOP_INVERT_RIGHT_WRIST_ROLL=true
 
 export FOLLOWER_ACCELERATION=80
 export FOLLOWER_MAX_ACCELERATION=120
@@ -50,15 +52,14 @@ export FOLLOWER_POSITION_D=40
 
 export SO_TELEOP_SMOOTHING_ARGS="--teleop_smoothing_alpha=${TELEOP_SMOOTHING_ALPHA} --teleop_smooth_gripper=${TELEOP_SMOOTH_GRIPPER}"
 export SO_TELEOP_LAYOUT_ARGS="--teleop.arm_mapping=${SO_TELEOP_ARM_MAPPING}"
-export SO_TELEOP_DIRECTION_ARGS="--teleop.invert_left_shoulder_pan=${SO_TELEOP_INVERT_LEFT_SHOULDER_PAN} --teleop.invert_left_wrist_flex=${SO_TELEOP_INVERT_LEFT_WRIST_FLEX} --teleop.invert_right_shoulder_pan=${SO_TELEOP_INVERT_RIGHT_SHOULDER_PAN} --teleop.invert_right_wrist_flex=${SO_TELEOP_INVERT_RIGHT_WRIST_FLEX}"
+export SO_TELEOP_DIRECTION_ARGS="--teleop.invert_left_shoulder_pan=${SO_TELEOP_INVERT_LEFT_SHOULDER_PAN} --teleop.invert_left_wrist_flex=${SO_TELEOP_INVERT_LEFT_WRIST_FLEX} --teleop.invert_left_wrist_roll=${SO_TELEOP_INVERT_LEFT_WRIST_ROLL} --teleop.invert_right_shoulder_pan=${SO_TELEOP_INVERT_RIGHT_SHOULDER_PAN} --teleop.invert_right_wrist_flex=${SO_TELEOP_INVERT_RIGHT_WRIST_FLEX} --teleop.invert_right_wrist_roll=${SO_TELEOP_INVERT_RIGHT_WRIST_ROLL}"
 export SO_TELEOP_ARGS="${SO_TELEOP_SMOOTHING_ARGS} ${SO_TELEOP_LAYOUT_ARGS} ${SO_TELEOP_DIRECTION_ARGS}"
 export SO_FOLLOWER_TUNING_ARGS="--robot.left_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.left_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.left_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.left_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.left_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D} --robot.right_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.right_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.right_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.right_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.right_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D}"
 
 
-export LEFT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.2:1.0-video-index0"
+export LEFT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.2:1.3-video-index0"
 export RIGHT_WRIST_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.3:1.0-video-index0"
 export FRONT_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.1:1.3-video-index0"
-
 
 
 export LEFT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${LEFT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}}'
