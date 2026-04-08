@@ -99,3 +99,152 @@ def test_bimanual_defaults_left_and_right_id_ranges():
         )
 
     assert [cfg.side for cfg in captured_configs] == ["left", "right"]
+
+
+def test_crossed_arm_mapping_swaps_output_prefixes_and_feedback_routes(bi_leader):
+    left_arm = _make_arm_mock("left_arm")
+    right_arm = _make_arm_mock("right_arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=[left_arm, right_arm],
+    ):
+        teleop = BiSOLeader(
+            BiSOLeaderConfig(
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+                arm_mapping="crossed",
+            )
+        )
+
+    teleop.connect()
+
+    left_arm.get_action.return_value = {"joint.pos": 1.0}
+    right_arm.get_action.return_value = {"joint.pos": 2.0}
+
+    assert teleop.get_action() == {
+        "right_joint.pos": 1.0,
+        "left_joint.pos": 2.0,
+    }
+
+    teleop.send_feedback(
+        {
+            "left_joint.pos": 10.0,
+            "right_joint.pos": 20.0,
+        }
+    )
+
+    left_arm.send_feedback.assert_called_with({"joint.pos": 20.0})
+    right_arm.send_feedback.assert_called_with({"joint.pos": 10.0})
+
+
+def test_invert_right_shoulder_pan_flips_right_arm_only():
+    left_arm = _make_arm_mock("left_arm")
+    right_arm = _make_arm_mock("right_arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=[left_arm, right_arm],
+    ):
+        teleop = BiSOLeader(
+            BiSOLeaderConfig(
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+                invert_right_shoulder_pan=True,
+            )
+        )
+
+    teleop.connect()
+    left_arm.get_action.return_value = {"shoulder_pan.pos": 12.0, "joint.pos": 1.0}
+    right_arm.get_action.return_value = {"shoulder_pan.pos": 30.0, "joint.pos": 2.0}
+
+    assert teleop.get_action() == {
+        "left_shoulder_pan.pos": 12.0,
+        "left_joint.pos": 1.0,
+        "right_shoulder_pan.pos": -30.0,
+        "right_joint.pos": 2.0,
+    }
+
+    teleop.send_feedback(
+        {
+            "left_shoulder_pan.pos": 5.0,
+            "right_shoulder_pan.pos": 8.0,
+        }
+    )
+
+    left_arm.send_feedback.assert_called_with({"shoulder_pan.pos": 5.0})
+    right_arm.send_feedback.assert_called_with({"shoulder_pan.pos": -8.0})
+
+
+def test_invert_left_and_right_shoulder_pan_flips_both_sides():
+    left_arm = _make_arm_mock("left_arm")
+    right_arm = _make_arm_mock("right_arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=[left_arm, right_arm],
+    ):
+        teleop = BiSOLeader(
+            BiSOLeaderConfig(
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+                invert_left_shoulder_pan=True,
+                invert_right_shoulder_pan=True,
+            )
+        )
+
+    teleop.connect()
+    left_arm.get_action.return_value = {"shoulder_pan.pos": 12.0}
+    right_arm.get_action.return_value = {"shoulder_pan.pos": 30.0}
+
+    assert teleop.get_action() == {
+        "left_shoulder_pan.pos": -12.0,
+        "right_shoulder_pan.pos": -30.0,
+    }
+
+    teleop.send_feedback(
+        {
+            "left_shoulder_pan.pos": 5.0,
+            "right_shoulder_pan.pos": 8.0,
+        }
+    )
+
+    left_arm.send_feedback.assert_called_with({"shoulder_pan.pos": -5.0})
+    right_arm.send_feedback.assert_called_with({"shoulder_pan.pos": -8.0})
+
+
+def test_invert_left_and_right_wrist_flex_flips_both_sides():
+    left_arm = _make_arm_mock("left_arm")
+    right_arm = _make_arm_mock("right_arm")
+
+    with patch(
+        "lerobot.teleoperators.bi_so_leader.bi_so_leader.SOLeader",
+        side_effect=[left_arm, right_arm],
+    ):
+        teleop = BiSOLeader(
+            BiSOLeaderConfig(
+                left_arm_config=SOLeaderConfig(port="/dev/left"),
+                right_arm_config=SOLeaderConfig(port="/dev/right"),
+                invert_left_wrist_flex=True,
+                invert_right_wrist_flex=True,
+            )
+        )
+
+    teleop.connect()
+    left_arm.get_action.return_value = {"wrist_flex.pos": 12.0}
+    right_arm.get_action.return_value = {"wrist_flex.pos": 30.0}
+
+    assert teleop.get_action() == {
+        "left_wrist_flex.pos": -12.0,
+        "right_wrist_flex.pos": -30.0,
+    }
+
+    teleop.send_feedback(
+        {
+            "left_wrist_flex.pos": 5.0,
+            "right_wrist_flex.pos": 8.0,
+        }
+    )
+
+    left_arm.send_feedback.assert_called_with({"wrist_flex.pos": -5.0})
+    right_arm.send_feedback.assert_called_with({"wrist_flex.pos": -8.0})

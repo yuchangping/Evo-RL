@@ -34,6 +34,13 @@ export LEFT_LEADER_PORT="${PORT_1}"
 # Teleoperation tuning: smoother and less jittery baseline for SO bimanual control.
 export TELEOP_SMOOTHING_ALPHA=0.35
 export TELEOP_SMOOTH_GRIPPER=false
+export SO_TELEOP_ARM_MAPPING="same_side"
+export SO_TELEOP_INVERT_LEFT_SHOULDER_PAN=true
+export SO_TELEOP_INVERT_LEFT_WRIST_FLEX=true
+# Right leader shoulder pan inversion:
+# when the right leader arm swings outward, the right follower arm also swings outward.
+export SO_TELEOP_INVERT_RIGHT_SHOULDER_PAN=true
+export SO_TELEOP_INVERT_RIGHT_WRIST_FLEX=true
 
 export FOLLOWER_ACCELERATION=80
 export FOLLOWER_MAX_ACCELERATION=120
@@ -42,6 +49,9 @@ export FOLLOWER_POSITION_I=0
 export FOLLOWER_POSITION_D=40
 
 export SO_TELEOP_SMOOTHING_ARGS="--teleop_smoothing_alpha=${TELEOP_SMOOTHING_ALPHA} --teleop_smooth_gripper=${TELEOP_SMOOTH_GRIPPER}"
+export SO_TELEOP_LAYOUT_ARGS="--teleop.arm_mapping=${SO_TELEOP_ARM_MAPPING}"
+export SO_TELEOP_DIRECTION_ARGS="--teleop.invert_left_shoulder_pan=${SO_TELEOP_INVERT_LEFT_SHOULDER_PAN} --teleop.invert_left_wrist_flex=${SO_TELEOP_INVERT_LEFT_WRIST_FLEX} --teleop.invert_right_shoulder_pan=${SO_TELEOP_INVERT_RIGHT_SHOULDER_PAN} --teleop.invert_right_wrist_flex=${SO_TELEOP_INVERT_RIGHT_WRIST_FLEX}"
+export SO_TELEOP_ARGS="${SO_TELEOP_SMOOTHING_ARGS} ${SO_TELEOP_LAYOUT_ARGS} ${SO_TELEOP_DIRECTION_ARGS}"
 export SO_FOLLOWER_TUNING_ARGS="--robot.left_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.left_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.left_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.left_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.left_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D} --robot.right_arm_config.acceleration=${FOLLOWER_ACCELERATION} --robot.right_arm_config.maximum_acceleration=${FOLLOWER_MAX_ACCELERATION} --robot.right_arm_config.position_p_coefficient=${FOLLOWER_POSITION_P} --robot.right_arm_config.position_i_coefficient=${FOLLOWER_POSITION_I} --robot.right_arm_config.position_d_coefficient=${FOLLOWER_POSITION_D}"
 
 

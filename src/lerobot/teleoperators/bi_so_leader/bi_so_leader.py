@@ -62,14 +62,56 @@ class BiSOLeader(Teleoperator):
         self.left_arm = SOLeader(left_arm_config)
         self.right_arm = SOLeader(right_arm_config)
 
+    def _maybe_invert_physical_arm_action(self, arm_side: str, action: dict[str, float]) -> dict[str, float]:
+        adjusted_action = dict(action)
+        should_invert_shoulder_pan = (
+            (arm_side == "left" and self.config.invert_left_shoulder_pan)
+            or (arm_side == "right" and self.config.invert_right_shoulder_pan)
+        )
+        should_invert_wrist_flex = (
+            (arm_side == "left" and self.config.invert_left_wrist_flex)
+            or (arm_side == "right" and self.config.invert_right_wrist_flex)
+        )
+        if should_invert_shoulder_pan and "shoulder_pan.pos" in adjusted_action:
+            adjusted_action["shoulder_pan.pos"] = -adjusted_action["shoulder_pan.pos"]
+        if should_invert_wrist_flex and "wrist_flex.pos" in adjusted_action:
+            adjusted_action["wrist_flex.pos"] = -adjusted_action["wrist_flex.pos"]
+        return adjusted_action
+
+    def _maybe_invert_physical_arm_feedback(self, arm_side: str, feedback: dict[str, float]) -> dict[str, float]:
+        adjusted_feedback = dict(feedback)
+        should_invert_shoulder_pan = (
+            (arm_side == "left" and self.config.invert_left_shoulder_pan)
+            or (arm_side == "right" and self.config.invert_right_shoulder_pan)
+        )
+        should_invert_wrist_flex = (
+            (arm_side == "left" and self.config.invert_left_wrist_flex)
+            or (arm_side == "right" and self.config.invert_right_wrist_flex)
+        )
+        if should_invert_shoulder_pan and "shoulder_pan.pos" in adjusted_feedback:
+            adjusted_feedback["shoulder_pan.pos"] = -adjusted_feedback["shoulder_pan.pos"]
+        if should_invert_wrist_flex and "wrist_flex.pos" in adjusted_feedback:
+            adjusted_feedback["wrist_flex.pos"] = -adjusted_feedback["wrist_flex.pos"]
+        return adjusted_feedback
+
+    def _output_prefix_for_arm(self, arm_side: str) -> str:
+        if self.config.arm_mapping == "crossed":
+            return "right" if arm_side == "left" else "left"
+        return arm_side
+
+    def _arm_side_for_output_prefix(self, output_prefix: str) -> str:
+        if self.config.arm_mapping == "crossed":
+            return "right" if output_prefix == "left" else "left"
+        return output_prefix
+
     @cached_property
     def action_features(self) -> dict[str, type]:
         left_arm_features = self.left_arm.action_features
         right_arm_features = self.right_arm.action_features
 
         return {
-            **{f"left_{k}": v for k, v in left_arm_features.items()},
-            **{f"right_{k}": v for k, v in right_arm_features.items()},
+            **{f"{self._output_prefix_for_arm('left')}_{k}": v for k, v in left_arm_features.items()},
+            **{f"{self._output_prefix_for_arm('right')}_{k}": v for k, v in right_arm_features.items()},
         }
 
     @cached_property
@@ -110,29 +152,32 @@ class BiSOLeader(Teleoperator):
     def get_action(self) -> dict[str, float]:
         action_dict = {}
 
-        # Add "left_" prefix
-        left_action = self.left_arm.get_action()
-        action_dict.update({f"left_{key}": value for key, value in left_action.items()})
+        # Map the physical leader arm to the configured output side.
+        left_action = self._maybe_invert_physical_arm_action("left", self.left_arm.get_action())
+        left_prefix = self._output_prefix_for_arm("left")
+        action_dict.update({f"{left_prefix}_{key}": value for key, value in left_action.items()})
 
-        # Add "right_" prefix
-        right_action = self.right_arm.get_action()
-        action_dict.update({f"right_{key}": value for key, value in right_action.items()})
+        right_action = self._maybe_invert_physical_arm_action("right", self.right_arm.get_action())
+        right_prefix = self._output_prefix_for_arm("right")
+        action_dict.update({f"{right_prefix}_{key}": value for key, value in right_action.items()})
 
         return action_dict
 
     @check_if_not_connected
     def send_feedback(self, feedback: dict[str, float]) -> None:
-        # Remove "left_" prefix
-        left_feedback = {
-            key.removeprefix("left_"): value for key, value in feedback.items() if key.startswith("left_")
-        }
-        # Remove "right_" prefix
-        right_feedback = {
-            key.removeprefix("right_"): value for key, value in feedback.items() if key.startswith("right_")
-        }
+        feedback_by_arm = {"left": {}, "right": {}}
+        for prefix in ("left", "right"):
+            arm_side = self._arm_side_for_output_prefix(prefix)
+            feedback_by_arm[arm_side].update(
+                {
+                    key.removeprefix(f"{prefix}_"): value
+                    for key, value in feedback.items()
+                    if key.startswith(f"{prefix}_")
+                }
+            )
 
-        self.left_arm.send_feedback(left_feedback)
-        self.right_arm.send_feedback(right_feedback)
+        self.left_arm.send_feedback(self._maybe_invert_physical_arm_feedback("left", feedback_by_arm["left"]))
+        self.right_arm.send_feedback(self._maybe_invert_physical_arm_feedback("right", feedback_by_arm["right"]))
 
     @check_if_not_connected
     def disconnect(self) -> None:
