@@ -65,3 +65,89 @@ export FRONT_CAM="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:9.1:1.3-video-index0"
 export LEFT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${LEFT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}}'
 export FRONT_CAM_CFG='front: {type: opencv, index_or_path: "'"${FRONT_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}'
 export RIGHT_CAM_CFG='{ wrist: {type: opencv, index_or_path: "'"${RIGHT_WRIST_CAM}"'", width: 640, height: 480, fps: 30, fourcc: "MJPG"}, '"${FRONT_CAM_CFG}"'}'
+
+
+show_demo_count() {
+  local dataset_dir="${LOCAL_DATA_ROOT}/${DEMO_REPO_ID}"
+  local info_json="${dataset_dir}/meta/info.json"
+  local current=0
+
+  if [ -f "$info_json" ]; then
+    current=$(python - "$info_json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    print(int(json.load(f).get("total_episodes", 0)))
+PY
+)
+  fi
+
+  echo "${DEMO_REPO_ID}: ${current} episodes"
+}
+
+
+record_to_total() {
+  local target_total="$1"
+  local dataset_dir="${LOCAL_DATA_ROOT}/${DEMO_REPO_ID}"
+  local info_json="${dataset_dir}/meta/info.json"
+  local current=0
+
+  if [ -z "$target_total" ]; then
+    echo "Usage: record_to_total <target_total>"
+    return 1
+  fi
+
+  if ! [[ "$target_total" =~ ^[0-9]+$ ]]; then
+    echo "target_total must be a non-negative integer"
+    return 1
+  fi
+
+  if [ -f "$info_json" ]; then
+    current=$(python - "$info_json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    print(int(json.load(f).get("total_episodes", 0)))
+PY
+)
+  fi
+
+  local remaining=$((target_total - current))
+
+  if [ "$remaining" -le 0 ]; then
+    echo "Current dataset already has ${current} episodes, meeting or exceeding target ${target_total}."
+    return 0
+  fi
+
+  mkdir -p "$dataset_dir"
+  echo "Current dataset has ${current} episodes. Recording ${remaining} more to reach ${target_total} total."
+
+  lerobot-record \
+    --robot.type=bi_so_follower \
+    --robot.left_arm_config.port="${LEFT_FOLLOWER_PORT}" \
+    --robot.right_arm_config.port="${RIGHT_FOLLOWER_PORT}" \
+    --robot.id="${ROBOT_ID}" \
+    --robot.left_arm_config.cameras="${LEFT_CAM_CFG}" \
+    --robot.right_arm_config.cameras="${RIGHT_CAM_CFG}" \
+    --teleop.type=bi_so_leader \
+    --teleop.left_arm_config.port="${LEFT_LEADER_PORT}" \
+    --teleop.right_arm_config.port="${RIGHT_LEADER_PORT}" \
+    --teleop.left_arm_config.gripper_input_min=0 \
+    --teleop.left_arm_config.gripper_input_max=40 \
+    --teleop.right_arm_config.gripper_input_min=0 \
+    --teleop.right_arm_config.gripper_input_max=40 \
+    --teleop.id="${TELEOP_ID}" \
+    --dataset.repo_id="${DEMO_REPO_ID}" \
+    --dataset.root="${dataset_dir}" \
+    --dataset.single_task="${TASK_TEXT}" \
+    --dataset.num_episodes="${remaining}" \
+    --dataset.episode_time_s=0 \
+    --dataset.reset_time_s=0 \
+    --dataset.push_to_hub=false \
+    --display_data=true \
+    --resume=true \
+    ${SO_TELEOP_ARGS} \
+    ${SO_FOLLOWER_TUNING_ARGS}
+}
