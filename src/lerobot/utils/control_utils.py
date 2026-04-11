@@ -153,17 +153,17 @@ class TTYKeyboardListener:
     def _handle_key(self, key: str):
         normalized = key.lower() if len(key) == 1 else key
         if normalized == "RIGHT":
-            print("检测到右方向键：结束当前条并保存。")
+            print("[控制台] 收到右方向键，结束当前条并保存。")
             self.events["exit_early"] = True
         elif normalized == "DOWN":
-            print("检测到下方向键：开始下一阶段。")
+            print("[控制台] 收到下方向键，开始当前条或进入下一阶段。")
             self.events["advance_to_next_stage"] = True
         elif normalized == "LEFT":
-            print("检测到左方向键：丢弃当前条并重录。")
+            print("[控制台] 收到左方向键，丢弃当前条并重录。")
             self.events["rerecord_episode"] = True
             self.events["exit_early"] = True
         elif normalized == "ESC":
-            print("检测到 Esc：停止数据采集。")
+            print("[控制台] 收到 Esc，停止整个数据采集会话。")
             self.events["stop_recording"] = True
             self.events["exit_early"] = True
         elif normalized == self.intervention_toggle_key:
@@ -171,14 +171,14 @@ class TTYKeyboardListener:
             if now - self._last_intervention_time < INTERVENTION_TOGGLE_COOLDOWN_S:
                 return
             self._last_intervention_time = now
-            print(f"检测到 '{self.intervention_toggle_key}'：切换 intervention 模式。")
+            print(f"[控制台] 收到 '{self.intervention_toggle_key}'，切换 intervention 模式。")
             self.events["toggle_intervention"] = True
         elif self.episode_success_key and normalized == self.episode_success_key:
-            print(f"检测到 '{self.episode_success_key}'：标记当前条成功并结束。")
+            print(f"[控制台] 收到 '{self.episode_success_key}'，标记当前条成功并结束。")
             self.events["episode_outcome"] = EPISODE_SUCCESS
             self.events["exit_early"] = True
         elif self.episode_failure_key and normalized == self.episode_failure_key:
-            print(f"检测到 '{self.episode_failure_key}'：标记当前条失败并结束。")
+            print(f"[控制台] 收到 '{self.episode_failure_key}'，标记当前条失败并结束。")
             self.events["episode_outcome"] = EPISODE_FAILURE
             self.events["exit_early"] = True
 
@@ -273,17 +273,17 @@ def init_keyboard_listener(
         def on_press(key):
             try:
                 if key == keyboard.Key.right:
-                    print("检测到右方向键：结束当前条并保存。")
+                    print("[控制台] 收到右方向键，结束当前条并保存。")
                     events["exit_early"] = True
                 elif key == keyboard.Key.down:
-                    print("检测到下方向键：开始下一阶段。")
+                    print("[控制台] 收到下方向键，开始当前条或进入下一阶段。")
                     events["advance_to_next_stage"] = True
                 elif key == keyboard.Key.left:
-                    print("检测到左方向键：丢弃当前条并重录。")
+                    print("[控制台] 收到左方向键，丢弃当前条并重录。")
                     events["rerecord_episode"] = True
                     events["exit_early"] = True
                 elif key == keyboard.Key.esc:
-                    print("检测到 Esc：停止数据采集。")
+                    print("[控制台] 收到 Esc，停止整个数据采集会话。")
                     events["stop_recording"] = True
                     events["exit_early"] = True
                 elif hasattr(key, "char") and key.char and key.char.lower() == intervention_toggle_key.lower():
@@ -291,7 +291,7 @@ def init_keyboard_listener(
                     if now - last_intervention_time[0] < INTERVENTION_TOGGLE_COOLDOWN_S:
                         return
                     last_intervention_time[0] = now
-                    print(f"检测到 '{intervention_toggle_key}'：切换 intervention 模式。")
+                    print(f"[控制台] 收到 '{intervention_toggle_key}'，切换 intervention 模式。")
                     events["toggle_intervention"] = True
                 elif (
                     episode_success_key
@@ -299,7 +299,7 @@ def init_keyboard_listener(
                     and key.char
                     and key.char.lower() == episode_success_key.lower()
                 ):
-                    print(f"检测到 '{episode_success_key}'：标记当前条成功并结束。")
+                    print(f"[控制台] 收到 '{episode_success_key}'，标记当前条成功并结束。")
                     events["episode_outcome"] = EPISODE_SUCCESS
                     events["exit_early"] = True
                 elif (
@@ -308,7 +308,7 @@ def init_keyboard_listener(
                     and key.char
                     and key.char.lower() == episode_failure_key.lower()
                 ):
-                    print(f"检测到 '{episode_failure_key}'：标记当前条失败并结束。")
+                    print(f"[控制台] 收到 '{episode_failure_key}'，标记当前条失败并结束。")
                     events["episode_outcome"] = EPISODE_FAILURE
                     events["exit_early"] = True
             except Exception as e:

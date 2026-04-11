@@ -305,6 +305,8 @@ class RecordConfig:
 def _log_manual_stage_prompt(
     *,
     stage_name: str,
+    current_episode_idx: int,
+    total_episodes: int,
     prompt: str,
     show_intervention_key: bool,
     intervention_toggle_key: str,
@@ -312,20 +314,109 @@ def _log_manual_stage_prompt(
     episode_success_key: str,
     episode_failure_key: str,
 ) -> None:
+    divider = "=" * 72
     lines = [
-        f"[{stage_name}] {prompt}",
-        "按键：下方向键 = 开始下一条 / 进入录制阶段",
-        "按键：右方向键 = 结束当前条并保存",
-        "按键：左方向键 = 丢弃当前条并重录",
-        "按键：Esc = 停止整个采集会话",
+        divider,
+        f"{stage_name}",
+        f"当前进度: 第 {current_episode_idx}/{total_episodes} 条",
+        f"当前提示: {prompt}",
+        "下一步: 按下 下方向键 开始当前条录制",
+        "-" * 72,
+        "按键说明:",
+        "下方向键: 开始当前条录制 / 进入下一阶段",
+        "左方向键: 丢弃当前条并重录",
+        "Esc: 停止整个采集会话",
     ]
     if show_intervention_key:
-        lines.append(f"按键：{intervention_toggle_key} = 切换 intervention 模式")
+        lines.append(f"{intervention_toggle_key}: 切换人工接管")
     if show_outcome_keys:
-        lines.append(
-            f"按键：{episode_success_key} = 标记成功并结束，{episode_failure_key} = 标记失败并结束"
-        )
+        lines.append(f"{episode_success_key}: 成功并结束")
+        lines.append(f"{episode_failure_key}: 失败并结束")
+    lines.extend(
+        [
+            "-" * 72,
+            "操作流程:",
+            "1. 先摆好当前条的初始状态，或完成复位。",
+            "2. 按下下方向键，正式开始当前条录制。",
+            "3. 录制开始后先让 policy 执行，必要时再人工接管。",
+            "4. 当前条结束时按成功/失败键，或按左方向键重录。",
+        ]
+    )
+    lines.append(divider)
     logging.info("\n".join(lines))
+
+
+def _log_episode_summary(
+    *,
+    title: str,
+    message: str,
+    current_episode_idx: int,
+    total_episodes: int,
+) -> None:
+    divider = "=" * 72
+    logging.info(
+        "\n%s\n%s\n当前进度: 第 %d/%d 条\n%s\n%s",
+        divider,
+        title,
+        current_episode_idx,
+        total_episodes,
+        message,
+        divider,
+    )
+
+
+def _wait_for_episode_start(
+    *,
+    robot,
+    events: dict,
+    cfg: "RecordConfig",
+    teleop_action_processor,
+    robot_action_processor,
+    robot_observation_processor,
+    teleop,
+    policy_sync_executor,
+    collector_policy_id_policy: str,
+    collector_policy_id_human: str,
+    teleop_action_smoother,
+    stage_name: str,
+    episode_idx: int,
+    total_episodes: int,
+    prompt: str,
+) -> None:
+    events["advance_to_next_stage"] = False
+    _log_manual_stage_prompt(
+        stage_name=stage_name,
+        current_episode_idx=episode_idx,
+        total_episodes=total_episodes,
+        prompt=prompt,
+        show_intervention_key=cfg.policy is not None and cfg.teleop is not None,
+        intervention_toggle_key=cfg.intervention_toggle_key,
+        show_outcome_keys=cfg.enable_episode_outcome_labeling,
+        episode_success_key=cfg.episode_success_key,
+        episode_failure_key=cfg.episode_failure_key,
+    )
+    record_loop(
+        robot=robot,
+        events=events,
+        fps=cfg.dataset.fps,
+        teleop_action_processor=teleop_action_processor,
+        robot_action_processor=robot_action_processor,
+        robot_observation_processor=robot_observation_processor,
+        teleop=teleop,
+        control_time_s=0,
+        single_task=cfg.dataset.single_task,
+        display_data=cfg.display_data,
+        policy_sync_executor=policy_sync_executor,
+        intervention_state_machine_enabled=False,
+        collector_policy_id_policy=collector_policy_id_policy,
+        collector_policy_id_human=collector_policy_id_human,
+        acp_inference=cfg.acp_inference,
+        teleop_action_smoother=teleop_action_smoother,
+        communication_retry_timeout_s=cfg.communication_retry_timeout_s,
+        communication_retry_interval_s=cfg.communication_retry_interval_s,
+        advance_to_next_stage_key_enabled=True,
+        ignore_exit_early=True,
+    )
 
 
 def _ensure_human_inloop_compatible_features(
@@ -434,7 +525,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             )
 
         # Load pretrained policy
-        policy = None if cfg.policy is None else make_policy(cfg.policy, ds_meta=dataset.meta)
+        policy = (
+            None
+            if cfg.policy is None
+            else make_policy(cfg.policy, ds_meta=dataset.meta, rename_map=cfg.dataset.rename_map)
+        )
         preprocessor = None
         postprocessor = None
         if cfg.acp_inference.enable and cfg.policy is None:
@@ -490,56 +585,57 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
         with VideoEncodingManager(dataset):
             recorded_episodes = 0
-            if cfg.dataset.reset_time_s <= 0 and not events["stop_recording"]:
-                _log_manual_stage_prompt(
-                    stage_name="准备阶段",
-                    prompt="开始第 1 条之前的手动准备/复位阶段。按下方向键开始第一条采集。",
-                    show_intervention_key=cfg.policy is not None and cfg.teleop is not None,
-                    intervention_toggle_key=cfg.intervention_toggle_key,
-                    show_outcome_keys=cfg.enable_episode_outcome_labeling,
-                    episode_success_key=cfg.episode_success_key,
-                    episode_failure_key=cfg.episode_failure_key,
+            needs_manual_reset_prompt = False
+            while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+                events["episode_outcome"] = None
+                events["advance_to_next_stage"] = False
+                current_episode_idx = dataset.num_episodes + 1
+                stage_name = (
+                    "等待复位"
+                    if needs_manual_reset_prompt
+                    else "等待开始"
                 )
-                record_loop(
+                stage_prompt = (
+                    (
+                        f"上一条已结束。当前是复位阶段，请手动复位/准备环境。"
+                        f"完成后按下下方向键开始第 {current_episode_idx} 条录制。"
+                    )
+                    if needs_manual_reset_prompt
+                    else "初始阶段已就绪。按下下方向键开始第一条录制。"
+                )
+                if needs_manual_reset_prompt:
+                    log_say("Reset the environment", cfg.play_sounds)
+                _wait_for_episode_start(
                     robot=robot,
                     events=events,
-                    fps=cfg.dataset.fps,
+                    cfg=cfg,
                     teleop_action_processor=teleop_action_processor,
                     robot_action_processor=robot_action_processor,
                     robot_observation_processor=robot_observation_processor,
                     teleop=teleop,
-                    control_time_s=cfg.dataset.reset_time_s,
-                    single_task=cfg.dataset.single_task,
-                    display_data=cfg.display_data,
                     policy_sync_executor=policy_sync_executor,
-                    intervention_state_machine_enabled=cfg.intervention_state_machine_enabled,
                     collector_policy_id_policy=collector_policy_id_policy,
                     collector_policy_id_human=collector_policy_id_human,
-                    acp_inference=cfg.acp_inference,
                     teleop_action_smoother=teleop_action_smoother,
-                    communication_retry_timeout_s=cfg.communication_retry_timeout_s,
-                    communication_retry_interval_s=cfg.communication_retry_interval_s,
-                    advance_to_next_stage_key_enabled=True,
-                    ignore_exit_early=True,
+                    stage_name=stage_name,
+                    episode_idx=current_episode_idx,
+                    total_episodes=cfg.dataset.num_episodes,
+                    prompt=stage_prompt,
                 )
-            while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
-                events["episode_outcome"] = None
-                events["advance_to_next_stage"] = False
-                pending_rerecord = False
-                current_episode_idx = dataset.num_episodes + 1
-                if cfg.dataset.episode_time_s <= 0:
-                    _log_manual_stage_prompt(
-                        stage_name=f"录制阶段 {current_episode_idx}/{cfg.dataset.num_episodes}",
-                        prompt=f"当前正在录制第 {current_episode_idx} 条。",
-                        show_intervention_key=cfg.policy is not None and cfg.teleop is not None,
-                        intervention_toggle_key=cfg.intervention_toggle_key,
-                        show_outcome_keys=cfg.enable_episode_outcome_labeling,
-                        episode_success_key=cfg.episode_success_key,
-                        episode_failure_key=cfg.episode_failure_key,
-                    )
-                    log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
-                else:
-                    log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
+                needs_manual_reset_prompt = False
+                if events["stop_recording"]:
+                    break
+                _log_episode_summary(
+                    title="正在录制",
+                    message=(
+                        f"第 {current_episode_idx} 条已开始。policy 正在执行，你可以随时按 "
+                        f"'{cfg.intervention_toggle_key}' 接管；按 '{cfg.episode_success_key}' 记成功，"
+                        f"按 '{cfg.episode_failure_key}' 记失败，按左方向键重录。"
+                    ),
+                    current_episode_idx=current_episode_idx,
+                    total_episodes=cfg.dataset.num_episodes,
+                )
+                log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
                 record_loop(
                     robot=robot,
                     events=events,
@@ -584,65 +680,23 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 if callable(on_episode_outcome):
                     on_episode_outcome(robot, teleop, episode_success)
 
-                # Execute a few seconds without recording to give time to manually reset the environment
-                # Skip reset for the last episode to be recorded
-                if not events["stop_recording"] and (
-                    (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
-                ):
-                    if events["rerecord_episode"]:
-                        pending_rerecord = True
-                        events["rerecord_episode"] = False
-                    if cfg.dataset.reset_time_s <= 0:
-                        _log_manual_stage_prompt(
-                            stage_name="复位阶段",
-                            prompt=(
-                                "当前条已丢弃，请手动复位/准备环境，完成后按下方向键开始重录。"
-                                if pending_rerecord
-                                else "请手动复位环境，完成后按下方向键开始下一条。"
-                            ),
-                            show_intervention_key=cfg.policy is not None and cfg.teleop is not None,
-                            intervention_toggle_key=cfg.intervention_toggle_key,
-                            show_outcome_keys=cfg.enable_episode_outcome_labeling,
-                            episode_success_key=cfg.episode_success_key,
-                            episode_failure_key=cfg.episode_failure_key,
-                        )
-                        events["advance_to_next_stage"] = False
-                    log_say("Reset the environment", cfg.play_sounds)
-
-                    # reset g1 robot
-                    if robot.name == "unitree_g1":
-                        robot.reset()
-
-                    record_loop(
-                        robot=robot,
-                        events=events,
-                        fps=cfg.dataset.fps,
-                        teleop_action_processor=teleop_action_processor,
-                        robot_action_processor=robot_action_processor,
-                        robot_observation_processor=robot_observation_processor,
-                        teleop=teleop,
-                        control_time_s=cfg.dataset.reset_time_s,
-                        single_task=cfg.dataset.single_task,
-                        display_data=cfg.display_data,
-                        policy_sync_executor=policy_sync_executor,
-                        intervention_state_machine_enabled=cfg.intervention_state_machine_enabled,
-                        collector_policy_id_policy=collector_policy_id_policy,
-                        collector_policy_id_human=collector_policy_id_human,
-                        acp_inference=cfg.acp_inference,
-                        teleop_action_smoother=teleop_action_smoother,
-                        communication_retry_timeout_s=cfg.communication_retry_timeout_s,
-                        communication_retry_interval_s=cfg.communication_retry_interval_s,
-                        advance_to_next_stage_key_enabled=cfg.dataset.reset_time_s <= 0,
-                        ignore_exit_early=cfg.dataset.reset_time_s <= 0,
-                    )
-
-                if pending_rerecord or events["rerecord_episode"]:
+                if events["rerecord_episode"]:
                     log_say("Re-record episode", cfg.play_sounds)
                     events["rerecord_episode"] = False
                     events["exit_early"] = False
                     events["advance_to_next_stage"] = False
                     events["episode_outcome"] = None
                     dataset.clear_episode_buffer()
+                    needs_manual_reset_prompt = True
+                    _log_episode_summary(
+                        title="等待复位",
+                        message=(
+                            f"第 {current_episode_idx} 条已丢弃，不会保存。"
+                            f"请手动复位后按下下方向键，重新开始第 {current_episode_idx} 条。"
+                        ),
+                        current_episode_idx=current_episode_idx,
+                        total_episodes=cfg.dataset.num_episodes,
+                    )
                     continue
 
                 extra_episode_metadata = (
@@ -651,23 +705,24 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 dataset.save_episode(extra_episode_metadata=extra_episode_metadata)
                 recorded_episodes += 1
 
-                if (
-                    cfg.dataset.reset_time_s <= 0
-                    and not events["stop_recording"]
-                    and recorded_episodes < cfg.dataset.num_episodes
-                ):
-                    next_episode_idx = dataset.num_episodes + 1
-                    _log_manual_stage_prompt(
-                        stage_name="保存完成",
-                        prompt=f"第 {dataset.num_episodes} 条已保存。按下方向键开始第 {next_episode_idx} 条。",
-                        show_intervention_key=cfg.policy is not None and cfg.teleop is not None,
-                        intervention_toggle_key=cfg.intervention_toggle_key,
-                        show_outcome_keys=cfg.enable_episode_outcome_labeling,
-                        episode_success_key=cfg.episode_success_key,
-                        episode_failure_key=cfg.episode_failure_key,
+                if recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+                    needs_manual_reset_prompt = True
+                    _log_episode_summary(
+                        title="等待复位",
+                        message=(
+                            f"第 {dataset.num_episodes} 条已保存。"
+                            f"请手动复位后按下下方向键，开始第 {dataset.num_episodes + 1} 条。"
+                        ),
+                        current_episode_idx=dataset.num_episodes,
+                        total_episodes=cfg.dataset.num_episodes,
                     )
-                elif cfg.dataset.reset_time_s <= 0 and recorded_episodes >= cfg.dataset.num_episodes:
-                    logging.info("Episode %d recorded successfully. Recording target reached.", dataset.num_episodes)
+                elif recorded_episodes >= cfg.dataset.num_episodes:
+                    _log_episode_summary(
+                        title="采集完成",
+                        message=f"第 {dataset.num_episodes} 条已保存。已达到目标 episode 数，采集结束。",
+                        current_episode_idx=dataset.num_episodes,
+                        total_episodes=cfg.dataset.num_episodes,
+                    )
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
 
