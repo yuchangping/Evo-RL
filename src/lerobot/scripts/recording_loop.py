@@ -15,6 +15,7 @@
 """Core recording loop used by `lerobot_record.py`."""
 
 import logging
+import os
 import time
 from collections.abc import Callable
 from copy import deepcopy
@@ -57,6 +58,7 @@ T = TypeVar("T")
 
 INTERVENTION_HOLD_BODY_THRESHOLD = 1.0
 INTERVENTION_HOLD_GRIPPER_THRESHOLD = 2.5
+DEFAULT_INTERVENTION_ENTER_DELAY_S = 0.0
 
 
 """ --------------- record_loop() data flow --------------------------
@@ -173,6 +175,15 @@ def record_loop(
     intervention_waiting_for_motion = False
     intervention_hold_action: RobotAction | None = None
     intervention_hold_teleop_reference: RobotAction | None = None
+    intervention_activation_deadline_t: float | None = None
+
+    try:
+        intervention_enter_delay_s = float(
+            os.environ.get("INTERVENTION_ENTER_DELAY_S", str(DEFAULT_INTERVENTION_ENTER_DELAY_S))
+        )
+    except ValueError:
+        intervention_enter_delay_s = DEFAULT_INTERVENTION_ENTER_DELAY_S
+    intervention_enter_delay_s = max(intervention_enter_delay_s, 0.0)
 
     teleop_arm_for_mode_switch: Any | None = None
     if isinstance(teleop, Teleoperator):
@@ -302,20 +313,28 @@ def record_loop(
             events["toggle_intervention"] = False
             if intervention_enabled:
                 if intervention_state == INTERVENTION_STATE_POLICY:
-                    intervention_state = INTERVENTION_STATE_ACTIVE
-                    set_teleop_manual_control(True)
-                    intervention_waiting_for_motion = True
-                    intervention_hold_action = clone_action(last_commanded_action)
-                    intervention_hold_teleop_reference = None
-                    logging.info(
-                        "Intervention enabled (S1): follower holds current pose until meaningful leader motion is detected."
-                    )
+                    if intervention_enter_delay_s > 0:
+                        intervention_activation_deadline_t = time.perf_counter() + intervention_enter_delay_s
+                        logging.info(
+                            "Intervention requested: manual takeover will arm in %.2fs. Keep follower steady until then.",
+                            intervention_enter_delay_s,
+                        )
+                    else:
+                        intervention_state = INTERVENTION_STATE_ACTIVE
+                        set_teleop_manual_control(True)
+                        intervention_waiting_for_motion = True
+                        intervention_hold_action = clone_action(last_commanded_action)
+                        intervention_hold_teleop_reference = None
+                        logging.info(
+                            "Intervention enabled (S1): follower holds current pose until meaningful leader motion is detected."
+                        )
                 else:
                     intervention_state = INTERVENTION_STATE_RELEASE
                     set_teleop_manual_control(False)
                     intervention_waiting_for_motion = False
                     intervention_hold_action = None
                     intervention_hold_teleop_reference = None
+                    intervention_activation_deadline_t = None
                     if policy is not None and preprocessor is not None and postprocessor is not None:
                         policy.reset()
                         preprocessor.reset()
@@ -328,6 +347,17 @@ def record_loop(
                     logging.info("Intervention release requested (S2): returning control to policy.")
             else:
                 logging.info("Intervention toggle ignored because policy+teleop are not both active.")
+
+        if intervention_activation_deadline_t is not None and time.perf_counter() >= intervention_activation_deadline_t:
+            intervention_activation_deadline_t = None
+            intervention_state = INTERVENTION_STATE_ACTIVE
+            set_teleop_manual_control(True)
+            intervention_waiting_for_motion = True
+            intervention_hold_action = clone_action(last_commanded_action)
+            intervention_hold_teleop_reference = None
+            logging.info(
+                "Intervention enabled (S1): delay elapsed, follower now holds current pose until meaningful leader motion is detected."
+            )
 
         # Get robot observation
         obs = robot.get_observation()

@@ -63,6 +63,7 @@ lerobot-record \
 """
 
 import logging
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from pprint import pformat
@@ -105,6 +106,7 @@ from lerobot.scripts.recording_hil import (
     _capture_policy_runtime_state,  # noqa: F401
     _predict_policy_action_with_acp_inference,  # noqa: F401
 )
+from lerobot.scripts.lerobot_dataset_report import build_report
 from lerobot.scripts.recording_loop import record_loop
 from lerobot.teleoperators import (  # noqa: F401
     TeleoperatorConfig,
@@ -315,6 +317,11 @@ def _log_manual_stage_prompt(
     episode_failure_key: str,
 ) -> None:
     divider = "=" * 72
+    try:
+        intervention_enter_delay_s = float(os.environ.get("INTERVENTION_ENTER_DELAY_S", "0"))
+    except ValueError:
+        intervention_enter_delay_s = 0.0
+    intervention_enter_delay_s = max(intervention_enter_delay_s, 0.0)
     lines = [
         divider,
         f"{stage_name}",
@@ -328,7 +335,10 @@ def _log_manual_stage_prompt(
         "Esc: 停止整个采集会话",
     ]
     if show_intervention_key:
-        lines.append(f"{intervention_toggle_key}: 切换人工接管")
+        if intervention_enter_delay_s > 0:
+            lines.append(f"{intervention_toggle_key}: 切换人工接管（延迟 {intervention_enter_delay_s:.1f}s 生效）")
+        else:
+            lines.append(f"{intervention_toggle_key}: 切换人工接管")
     if show_outcome_keys:
         lines.append(f"{episode_success_key}: 成功并结束")
         lines.append(f"{episode_failure_key}: 失败并结束")
@@ -401,6 +411,34 @@ def _log_saved_progress_summary(
         total_saved_episodes,
         newly_recorded_episodes,
         remaining,
+        divider,
+    )
+
+
+def _log_dataset_quality_summary(dataset_dir: str) -> None:
+    divider = "=" * 72
+    try:
+        report = build_report(Path(dataset_dir))
+    except Exception as e:
+        logging.warning("Failed to summarize dataset quality for %s: %s", dataset_dir, e)
+        return
+
+    success = report["success_metrics"]["success_count"]
+    failure = report["success_metrics"]["failure_count"]
+    unlabeled = report["success_metrics"]["unlabeled_count"]
+    intervention_episodes = report["intervention_metrics"]["episodes_with_intervention"]
+    intervention_frames = report["intervention_metrics"]["intervention_frames"]
+    intervention_ratio = report["intervention_metrics"]["episode_intervention_ratio"]
+
+    logging.info(
+        "\n%s\n数据集标签统计\n成功条数: %d\n失败条数: %d\n未标注条数: %d\n有人工干预的 episode: %d\n人工干预 episode 占比: %.4f\n人工干预帧数: %d\n%s",
+        divider,
+        success,
+        failure,
+        unlabeled,
+        intervention_episodes,
+        intervention_ratio,
+        intervention_frames,
         divider,
     )
 
@@ -570,6 +608,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
             planned_new_episodes=int(cfg.dataset.num_episodes),
             resume=cfg.resume,
         )
+        _log_dataset_quality_summary(str(cfg.dataset.root))
 
         # Load pretrained policy
         policy = (
@@ -756,6 +795,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                     planned_new_episodes=cfg.dataset.num_episodes,
                     newly_recorded_episodes=recorded_episodes,
                 )
+                _log_dataset_quality_summary(str(cfg.dataset.root))
 
                 if recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                     needs_manual_reset_prompt = True
