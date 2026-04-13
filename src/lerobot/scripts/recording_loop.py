@@ -17,6 +17,7 @@
 import logging
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any, TypeVar
 
 import numpy as np
@@ -53,6 +54,9 @@ from lerobot.utils.utils import get_safe_torch_device
 from lerobot.utils.visualization_utils import log_rerun_data
 
 T = TypeVar("T")
+
+INTERVENTION_HOLD_BODY_THRESHOLD = 1.0
+INTERVENTION_HOLD_GRIPPER_THRESHOLD = 2.5
 
 
 """ --------------- record_loop() data flow --------------------------
@@ -164,7 +168,11 @@ def record_loop(
     intervention_enabled = intervention_state_machine_enabled and policy is not None and has_teleop
     intervention_state = INTERVENTION_STATE_POLICY
     last_teleop_action: RobotAction | None = None
+    last_commanded_action: RobotAction | None = None
     teleop_fallback_warned = False
+    intervention_waiting_for_motion = False
+    intervention_hold_action: RobotAction | None = None
+    intervention_hold_teleop_reference: RobotAction | None = None
 
     teleop_arm_for_mode_switch: Any | None = None
     if isinstance(teleop, Teleoperator):
@@ -201,6 +209,27 @@ def record_loop(
     if intervention_enabled:
         # Start in S0: policy drives both arms, teleop arm should accept feedback commands.
         set_teleop_manual_control(False)
+
+    def clone_action(action: RobotAction | None) -> RobotAction | None:
+        if action is None:
+            return None
+        return deepcopy(action)
+
+    def teleop_action_has_meaningful_motion(
+        current_action: RobotAction | None, reference_action: RobotAction | None
+    ) -> bool:
+        if current_action is None or reference_action is None:
+            return False
+
+        shared_keys = set(current_action).intersection(reference_action)
+        for key in shared_keys:
+            threshold = (
+                INTERVENTION_HOLD_GRIPPER_THRESHOLD if key.endswith("gripper.pos") else INTERVENTION_HOLD_BODY_THRESHOLD
+            )
+            if abs(float(current_action[key]) - float(reference_action[key])) >= threshold:
+                return True
+
+        return False
 
     def run_with_connection_retry(action_name: str, fn: Callable[[], T]) -> T:
         timeout_s = max(communication_retry_timeout_s, 0.0)
@@ -275,10 +304,18 @@ def record_loop(
                 if intervention_state == INTERVENTION_STATE_POLICY:
                     intervention_state = INTERVENTION_STATE_ACTIVE
                     set_teleop_manual_control(True)
-                    logging.info("Intervention enabled (S1): teleop actions now override policy execution.")
+                    intervention_waiting_for_motion = True
+                    intervention_hold_action = clone_action(last_commanded_action)
+                    intervention_hold_teleop_reference = None
+                    logging.info(
+                        "Intervention enabled (S1): follower holds current pose until meaningful leader motion is detected."
+                    )
                 else:
                     intervention_state = INTERVENTION_STATE_RELEASE
                     set_teleop_manual_control(False)
+                    intervention_waiting_for_motion = False
+                    intervention_hold_action = None
+                    intervention_hold_teleop_reference = None
                     if policy is not None and preprocessor is not None and postprocessor is not None:
                         policy.reset()
                         preprocessor.reset()
@@ -362,7 +399,40 @@ def record_loop(
         is_intervention = 0.0
         if intervention_enabled and intervention_state == INTERVENTION_STATE_ACTIVE:
             is_intervention = 1.0
-            if act_processed_teleop is not None:
+            if intervention_waiting_for_motion:
+                if act_processed_teleop is not None and intervention_hold_teleop_reference is None:
+                    intervention_hold_teleop_reference = clone_action(act_processed_teleop)
+                    logging.info("Intervention hold armed: leader pose latched. Move leader to start manual takeover.")
+
+                if teleop_action_has_meaningful_motion(act_processed_teleop, intervention_hold_teleop_reference):
+                    intervention_waiting_for_motion = False
+                    intervention_hold_action = None
+                    logging.info("Leader motion detected: teleop actions now override the held follower pose.")
+                    action_values = act_processed_teleop
+                elif intervention_hold_action is not None:
+                    action_values = intervention_hold_action
+                elif last_commanded_action is not None:
+                    action_values = last_commanded_action
+                    if not teleop_fallback_warned:
+                        logging.warning(
+                            "Intervention hold is active but no latched hold action is available; reusing last commanded action."
+                        )
+                        teleop_fallback_warned = True
+                elif act_processed_teleop is not None:
+                    action_values = act_processed_teleop
+                    if not teleop_fallback_warned:
+                        logging.warning(
+                            "Intervention hold is active without a prior command; falling back to current teleop action."
+                        )
+                        teleop_fallback_warned = True
+                else:
+                    action_values = zero_policy_action
+                    if not teleop_fallback_warned:
+                        logging.warning(
+                            "Intervention hold is active but no teleop or prior command is available; sending zero action."
+                        )
+                        teleop_fallback_warned = True
+            elif act_processed_teleop is not None:
                 action_values = act_processed_teleop
             elif last_teleop_action is not None:
                 action_values = last_teleop_action
@@ -387,6 +457,8 @@ def record_loop(
                     teleop_fallback_warned = True
         else:
             action_values = act_processed_policy if act_processed_policy is not None else act_processed_teleop
+
+        last_commanded_action = clone_action(action_values)
 
         # Applies a pipeline to the action, default is IdentityProcessor
         robot_action_to_send = robot_action_processor((action_values, obs))

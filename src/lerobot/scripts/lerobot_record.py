@@ -365,6 +365,46 @@ def _log_episode_summary(
     )
 
 
+def _log_dataset_status_summary(
+    *,
+    dataset_dir: str,
+    existing_episodes: int,
+    planned_new_episodes: int,
+    resume: bool,
+) -> None:
+    divider = "=" * 72
+    mode_text = "继续追加" if resume else "新建采集"
+    target_total = existing_episodes + planned_new_episodes
+    logging.info(
+        "\n%s\n数据集状态\n模式: %s\n已保存条数: %d\n本次计划采集: %d\n本次完成后预计总条数: %d\n数据集目录: %s\n%s",
+        divider,
+        mode_text,
+        existing_episodes,
+        planned_new_episodes,
+        target_total,
+        dataset_dir,
+        divider,
+    )
+
+
+def _log_saved_progress_summary(
+    *,
+    total_saved_episodes: int,
+    planned_new_episodes: int,
+    newly_recorded_episodes: int,
+) -> None:
+    divider = "=" * 72
+    remaining = max(planned_new_episodes - newly_recorded_episodes, 0)
+    logging.info(
+        "\n%s\n保存进度\n当前累计已保存: %d 条\n本次已新采集: %d 条\n本次还剩待采集: %d 条\n%s",
+        divider,
+        total_saved_episodes,
+        newly_recorded_episodes,
+        remaining,
+        divider,
+    )
+
+
 def _wait_for_episode_start(
     *,
     robot,
@@ -523,6 +563,13 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 batch_encoding_size=cfg.dataset.video_encoding_batch_size,
                 vcodec=cfg.dataset.vcodec,
             )
+
+        _log_dataset_status_summary(
+            dataset_dir=str(cfg.dataset.root),
+            existing_episodes=int(dataset.num_episodes),
+            planned_new_episodes=int(cfg.dataset.num_episodes),
+            resume=cfg.resume,
+        )
 
         # Load pretrained policy
         policy = (
@@ -704,6 +751,11 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 )
                 dataset.save_episode(extra_episode_metadata=extra_episode_metadata)
                 recorded_episodes += 1
+                _log_saved_progress_summary(
+                    total_saved_episodes=dataset.num_episodes,
+                    planned_new_episodes=cfg.dataset.num_episodes,
+                    newly_recorded_episodes=recorded_episodes,
+                )
 
                 if recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                     needs_manual_reset_prompt = True
