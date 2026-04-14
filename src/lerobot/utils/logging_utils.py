@@ -342,23 +342,29 @@ class MetricsTracker:
 
     def __str__(self) -> str:
         elapsed_s = time.perf_counter() - self._start_time
-        iteration_s = None
+        current_iteration_s = None
+        avg_iteration_s = None
         if "update_s" in self.metrics and "dataloading_s" in self.metrics:
-            iteration_s = self.metrics["update_s"].avg + self.metrics["dataloading_s"].avg
+            current_iteration_s = self.metrics["update_s"].val + self.metrics["dataloading_s"].val
+            avg_iteration_s = self.metrics["update_s"].avg + self.metrics["dataloading_s"].avg
 
         display_lines = [
             "训练状态",
-            f"  当前步数: {format_big_number(self.steps)}",
+            f"  当前步数: {self.steps}",
         ]
         if self._total_steps:
             display_lines.append(f"  当前进度: {100 * self.steps / self._total_steps:.1f}%")
-        if iteration_s is not None:
-            display_lines.append(f"  平均单步耗时: {iteration_s:.3f} 秒")
+        if current_iteration_s is not None:
+            display_lines.append(f"  当前单步耗时: {current_iteration_s:.3f} 秒")
+        if avg_iteration_s is not None:
+            display_lines.append(f"  平均单步耗时: {avg_iteration_s:.3f} 秒")
         display_lines.append(f"  已运行时间: {self._format_duration(elapsed_s)}")
-        if self._total_steps and iteration_s is not None:
+        if self._total_steps and avg_iteration_s is not None:
             remaining_steps = max(0, self._total_steps - self.steps)
+            estimated_total_s = self._total_steps * avg_iteration_s
+            display_lines.append(f"  预计总耗时: {self._format_duration(estimated_total_s)}")
             display_lines.append(
-                f"  预计剩余时间: {self._format_duration(remaining_steps * iteration_s)}"
+                f"  预计剩余时间: {self._format_duration(remaining_steps * avg_iteration_s)}"
             )
         return "\n".join(display_lines)
 
@@ -389,10 +395,13 @@ class MetricsTracker:
             **{k: m.avg if use_avg else m.val for k, m in self.metrics.items()},
         }
         if "update_s" in self.metrics and "dataloading_s" in self.metrics:
-            iteration_s = self.metrics["update_s"].avg + self.metrics["dataloading_s"].avg
-            metrics_dict["iteration_s"] = iteration_s
+            current_iteration_s = self.metrics["update_s"].val + self.metrics["dataloading_s"].val
+            avg_iteration_s = self.metrics["update_s"].avg + self.metrics["dataloading_s"].avg
+            metrics_dict["current_iteration_s"] = current_iteration_s
+            metrics_dict["iteration_s"] = avg_iteration_s
             if self._total_steps:
-                metrics_dict["remaining_s"] = max(0, self._total_steps - self.steps) * iteration_s
+                metrics_dict["remaining_s"] = max(0, self._total_steps - self.steps) * avg_iteration_s
+                metrics_dict["estimated_total_s"] = self._total_steps * avg_iteration_s
         if self._total_steps:
             metrics_dict["progress_pct"] = 100 * self.steps / self._total_steps
         return metrics_dict

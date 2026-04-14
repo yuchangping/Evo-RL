@@ -58,7 +58,7 @@ class ValueTrainPipelineConfig(HubMixin):
     seed: int | None = 1000
 
     num_workers: int = 4
-    batch_size: int = 64
+    batch_size: int = 8
     steps: int = 8_000
     log_freq: int = 200
     detailed_log_every: int = 5

@@ -363,6 +363,17 @@ def value_train(
             accelerator.wait_for_everyone()
 
     if is_main_process:
+        final_metrics = train_tracker.to_dict(use_avg=True)
+        elapsed_s = float(final_metrics.get("elapsed_s", 0.0))
+        avg_iteration_s = final_metrics.get("iteration_s")
+        summary_lines = [
+            "Value 训练完成",
+            f"  总训练步数: {step}",
+            f"  总耗时: {train_tracker._format_duration(elapsed_s)}",
+        ]
+        if avg_iteration_s is not None:
+            summary_lines.append(f"  平均单步耗时: {float(avg_iteration_s):.3f} 秒")
+        logging.info("\n".join(summary_lines))
         logging.info("End of value training")
 
         if cfg.value.push_to_hub:

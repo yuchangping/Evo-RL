@@ -9,8 +9,23 @@ export h100training=h100trainingh1
 # H100 training server defaults. Override these before `source env.sh` if needed.
 export MACHINE_ROLE=${MACHINE_ROLE:-h100_training}
 export EVO_RL_DATA_BASE=${EVO_RL_DATA_BASE:-/data2/ycp/lerobot_datasets}
+export EVO_RL_DOWNLOAD_ROOT=${EVO_RL_DOWNLOAD_ROOT:-/data2/ycp/hf_cache}
 export LOCAL_DATA_ROOT=${LOCAL_DATA_ROOT:-${EVO_RL_DATA_BASE}/local_machine}
 export SERVER_DATA_ROOT=${SERVER_DATA_ROOT:-${EVO_RL_DATA_BASE}/h100_server}
+
+# Keep model and dataset downloads in a dedicated cache directory.
+export HF_HOME=${HF_HOME:-${EVO_RL_DOWNLOAD_ROOT}}
+export HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-${EVO_RL_DOWNLOAD_ROOT}/hub}
+export HF_DATASETS_CACHE=${HF_DATASETS_CACHE:-${EVO_RL_DOWNLOAD_ROOT}/datasets}
+export HUGGINGFACE_ASSETS_CACHE=${HUGGINGFACE_ASSETS_CACHE:-${EVO_RL_DOWNLOAD_ROOT}/assets}
+export HF_LEROBOT_HOME=${HF_LEROBOT_HOME:-${HF_HOME}/lerobot}
+export TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-${EVO_RL_DOWNLOAD_ROOT}/transformers}
+export TORCH_HOME=${TORCH_HOME:-${EVO_RL_DOWNLOAD_ROOT}/torch}
+export TRITON_CACHE_DIR=${TRITON_CACHE_DIR:-${EVO_RL_DOWNLOAD_ROOT}/triton}
+export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+export TMPDIR=${TMPDIR:-${EVO_RL_DOWNLOAD_ROOT}/tmp}
+export TMP=${TMP:-${TMPDIR}}
+export TEMP=${TEMP:-${TMPDIR}}
 
 export DEMO_REPO_ID=${DATA_NS}/${TASK_NAME}_demo
 export ROUND1_REPO_ID=${DATA_NS}/eval_${TASK_NAME}_round1
@@ -19,6 +34,9 @@ export MERGED_R1_REPO_ID=${DATA_NS}/${TASK_NAME}_merged_r1
 export PI05_SFT_R0_NAME=${TASK_NAME}_pi05_sft_r0
 export VALUE_R1_NAME=${TASK_NAME}_value_r1
 export PI05_ACP_R1_NAME=${TASK_NAME}_pi05_acp_r1
+
+export TRAIN_SAVE_FREQ=${TRAIN_SAVE_FREQ:-1000}
+export VALUE_SAVE_FREQ=${VALUE_SAVE_FREQ:-1000}
 
 export ROBOT_ID=bi_follower_arm
 export TELEOP_ID=bi_leader_arm
