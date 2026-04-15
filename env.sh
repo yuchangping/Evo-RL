@@ -35,6 +35,11 @@ export PI05_SFT_R0_NAME=${TASK_NAME}_pi05_sft_r0
 export VALUE_R1_NAME=${TASK_NAME}_value_r1
 export PI05_ACP_R1_NAME=${TASK_NAME}_pi05_acp_r1
 
+# Value inference visualization defaults (can be overridden before source env.sh).
+export EVO_RL_VALUE_INFER_AUTO_VIZ=${EVO_RL_VALUE_INFER_AUTO_VIZ:-1}
+export EVO_RL_VALUE_INFER_VIZ_EPISODES=${EVO_RL_VALUE_INFER_VIZ_EPISODES:-0}
+export EVO_RL_VALUE_INFER_VIZ_VIDEO_KEY=${EVO_RL_VALUE_INFER_VIZ_VIDEO_KEY:-observation.images.right_front}
+
 export TRAIN_SAVE_FREQ=${TRAIN_SAVE_FREQ:-1000}
 export VALUE_SAVE_FREQ=${VALUE_SAVE_FREQ:-1000}
 

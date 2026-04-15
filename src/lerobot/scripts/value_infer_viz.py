@@ -544,6 +544,164 @@ def _export_single_episode_multiview(
     return dst_video_path
 
 
+
+def _build_quicklook_image_path(output_dir: Path, episode_index: int) -> Path:
+    return output_dir / f"episode{episode_index}_labels_quicklook.png"
+
+
+def _series_to_points(
+    values: np.ndarray,
+    x0: int,
+    y0: int,
+    width: int,
+    height: int,
+    y_min: float,
+    y_max: float,
+) -> list[tuple[int, int]]:
+    n = int(values.shape[0])
+    if n == 0:
+        return []
+
+    denom_x = max(1, n - 1)
+    denom_y = max(1e-6, y_max - y_min)
+    points: list[tuple[int, int]] = []
+    for i, value in enumerate(values):
+        x = int(round(x0 + width * (i / denom_x)))
+        y_norm = np.clip((float(value) - y_min) / denom_y, 0.0, 1.0)
+        y = int(round(y0 + (1.0 - y_norm) * height))
+        points.append((x, y))
+    return points
+
+
+def _export_episode_quicklook_png(
+    dataset: LeRobotDataset,
+    value_field: str,
+    advantage_field: str,
+    indicator_field: str,
+    viz_episodes: str,
+    output_dir: Path,
+) -> Path | None:
+    raw_dataset = dataset.hf_dataset.with_format(None)
+    column_names = set(raw_dataset.column_names)
+    if value_field not in column_names:
+        raise KeyError(f"Missing value field '{value_field}' in dataset.")
+
+    values_all = _to_1d_float(raw_dataset[value_field])
+    if advantage_field in column_names:
+        advantages_all = _to_1d_float(raw_dataset[advantage_field])
+    else:
+        advantages_all = np.zeros_like(values_all, dtype=np.float32)
+
+    if indicator_field in column_names:
+        indicators_all = _to_1d_int(raw_dataset[indicator_field])
+    else:
+        indicators_all = np.zeros(values_all.shape[0], dtype=np.int64)
+
+    episode_indices_all = np.asarray(raw_dataset["episode_index"], dtype=np.int64).reshape(-1)
+    frame_indices_all = np.asarray(raw_dataset["frame_index"], dtype=np.int64).reshape(-1)
+
+    if dataset.episodes is not None:
+        available_episodes = sorted(dataset.episodes)
+    else:
+        available_episodes = list(range(dataset.meta.total_episodes))
+
+    if viz_episodes.strip().lower() == "all":
+        episodes = available_episodes
+    else:
+        requested = _parse_episodes_arg(viz_episodes, dataset.meta.total_episodes)
+        available_set = set(available_episodes)
+        episodes = [ep for ep in requested if ep in available_set]
+
+    if len(episodes) == 0:
+        return None
+
+    episode_index = int(episodes[0])
+    ep_positions = np.flatnonzero(episode_indices_all == episode_index)
+    if ep_positions.shape[0] == 0:
+        return None
+
+    ep_frame_indices = frame_indices_all[ep_positions]
+    if bool(np.any(np.diff(ep_frame_indices) < 0)):
+        ep_positions = ep_positions[np.argsort(ep_frame_indices, kind="stable")]
+
+    ep_values = values_all[ep_positions]
+    ep_advantages = advantages_all[ep_positions]
+    ep_indicators = indicators_all[ep_positions]
+
+    width, height = 1600, 560
+    margin_left, margin_right = 72, 24
+    margin_top, margin_bottom = 52, 56
+    plot_x0, plot_y0 = margin_left, margin_top
+    plot_w = width - margin_left - margin_right
+    plot_h = height - margin_top - margin_bottom
+
+    canvas = Image.new("RGB", (width, height), (12, 16, 20))
+    draw = ImageDraw.Draw(canvas)
+
+    draw.rectangle(
+        (plot_x0, plot_y0, plot_x0 + plot_w, plot_y0 + plot_h),
+        outline=(80, 95, 110),
+        width=1,
+        fill=(20, 26, 32),
+    )
+
+    stacked = np.concatenate([ep_values, ep_advantages], axis=0)
+    y_min = float(np.min(stacked))
+    y_max = float(np.max(stacked))
+    if abs(y_max - y_min) < 1e-6:
+        y_min -= 1e-3
+        y_max += 1e-3
+    span = y_max - y_min
+    y_min -= 0.06 * span
+    y_max += 0.06 * span
+
+    for frac in (0.2, 0.4, 0.6, 0.8):
+        gy = int(round(plot_y0 + frac * plot_h))
+        draw.line((plot_x0, gy, plot_x0 + plot_w, gy), fill=(60, 72, 86), width=1)
+
+    n_frames = int(ep_values.shape[0])
+    denom_x = max(1, n_frames - 1)
+    for i, indicator in enumerate(ep_indicators):
+        if int(indicator) == 1:
+            x = int(round(plot_x0 + plot_w * (i / denom_x)))
+            draw.line((x, plot_y0, x, plot_y0 + plot_h), fill=(120, 88, 22), width=1)
+
+    value_points = _series_to_points(ep_values, plot_x0, plot_y0, plot_w, plot_h, y_min, y_max)
+    adv_points = _series_to_points(ep_advantages, plot_x0, plot_y0, plot_w, plot_h, y_min, y_max)
+
+    if len(value_points) >= 2:
+        draw.line(value_points, fill=(92, 200, 255), width=2)
+    elif len(value_points) == 1:
+        draw.ellipse((value_points[0][0] - 2, value_points[0][1] - 2, value_points[0][0] + 2, value_points[0][1] + 2), fill=(92, 200, 255))
+
+    if len(adv_points) >= 2:
+        draw.line(adv_points, fill=(255, 196, 96), width=2)
+    elif len(adv_points) == 1:
+        draw.ellipse((adv_points[0][0] - 2, adv_points[0][1] - 2, adv_points[0][0] + 2, adv_points[0][1] + 2), fill=(255, 196, 96))
+
+    font_title = _load_font(20)
+    font_text = _load_font(16)
+    positive_ratio = float(np.mean(ep_indicators.astype(np.float32))) if n_frames > 0 else 0.0
+
+    title = f"Episode {episode_index} Label Quicklook"
+    subtitle = f"frames={n_frames} | acp_positive_ratio={positive_ratio:.4f}"
+    draw.text((plot_x0, 14), title, fill=(235, 241, 248), font=font_title)
+    draw.text((plot_x0, 34), subtitle, fill=(173, 187, 201), font=font_text)
+
+    legend_y = height - 34
+    draw.rectangle((plot_x0, legend_y - 8, plot_x0 + 18, legend_y + 8), fill=(92, 200, 255))
+    draw.text((plot_x0 + 24, legend_y - 11), "value", fill=(220, 230, 240), font=font_text)
+    draw.rectangle((plot_x0 + 140, legend_y - 8, plot_x0 + 158, legend_y + 8), fill=(255, 196, 96))
+    draw.text((plot_x0 + 164, legend_y - 11), "advantage", fill=(220, 230, 240), font=font_text)
+    draw.rectangle((plot_x0 + 322, legend_y - 8, plot_x0 + 340, legend_y + 8), fill=(120, 88, 22))
+    draw.text((plot_x0 + 346, legend_y - 11), "acp_indicator=1", fill=(220, 230, 240), font=font_text)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    quicklook_path = _build_quicklook_image_path(output_dir=output_dir, episode_index=episode_index)
+    canvas.save(quicklook_path)
+    return quicklook_path
+
+
 def _export_overlay_videos(
     dataset: LeRobotDataset,
     value_field: str,

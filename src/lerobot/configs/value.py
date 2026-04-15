@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -100,6 +101,23 @@ class ValueInferenceVizConfig:
     smooth_window: int = 1
 
     def validate(self) -> None:
+        auto_viz_enabled = os.getenv("EVO_RL_VALUE_INFER_AUTO_VIZ", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if auto_viz_enabled and not self.enable:
+            self.enable = True
+            if self.episodes == "all":
+                self.episodes = os.getenv("EVO_RL_VALUE_INFER_VIZ_EPISODES", "0").strip() or "0"
+            if self.video_keys is None and self.video_key is None:
+                default_video_key = os.getenv(
+                    "EVO_RL_VALUE_INFER_VIZ_VIDEO_KEY", "observation.images.right_front"
+                ).strip()
+                if default_video_key:
+                    self.video_key = default_video_key
+
         if not self.episodes:
             raise ValueError("'viz.episodes' must be non-empty.")
         if not self.vcodec:

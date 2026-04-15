@@ -36,6 +36,7 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.utils import load_info, write_info
 from lerobot.policies.factory import make_policy, make_pre_post_processors
 from lerobot.scripts.value_infer_viz import (
+    _export_episode_quicklook_png,
     _export_overlay_videos,
 )
 from lerobot.utils.constants import (
@@ -446,6 +447,18 @@ def _export_visualization_outputs(
         smooth_window=cfg.viz.smooth_window,
     )
     logging.info("Exported %d overlay videos to %s", len(written_videos), viz_output_dir)
+
+    quicklook_path = _export_episode_quicklook_png(
+        dataset=dataset,
+        value_field=cfg.acp.value_field,
+        advantage_field=cfg.acp.advantage_field,
+        indicator_field=cfg.acp.indicator_field,
+        viz_episodes=cfg.viz.episodes,
+        output_dir=viz_output_dir,
+    )
+    if quicklook_path is not None:
+        logging.info("Exported episode quicklook image to %s", quicklook_path)
+
     return [str(path) for path in written_videos]
 
 
